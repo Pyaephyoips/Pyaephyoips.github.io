@@ -63,6 +63,32 @@
                 height: 400px;
             }
         }
+
+        /* Keyframes for infrastructure animations */
+        @keyframes pulse-slow {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+        }
+
+        @keyframes bounce-slow {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        @keyframes spin-slow {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes line-glow {
+            0%, 100% { opacity: 0.5; box-shadow: 0 0 5px rgba(44, 122, 123, 0.3); }
+            50% { opacity: 1; box-shadow: 0 0 15px rgba(44, 122, 123, 0.7); }
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -128,6 +154,28 @@
                     <div id="skills-content" class="p-6 bg-white rounded-lg shadow-md min-h-[200px]">
                         <!-- JS will populate this -->
                     </div>
+                </div>
+            </div>
+
+            <!-- New Infrastructure Animation Section -->
+            <div class="mt-20 text-center max-w-4xl mx-auto">
+                <h3 class="text-2xl font-bold text-gray-700 mb-6">Visualizing Infrastructure Expertise</h3>
+                <p class="text-gray-600 mb-8">This abstract animation represents the interconnected nature of modern IT infrastructure, mirroring the complex systems I design, manage, and secure.</p>
+                <div class="relative w-full h-80 bg-gray-100 rounded-xl shadow-inner overflow-hidden flex items-center justify-center">
+                    <!-- Base elements for abstract infrastructure -->
+                    <div class="absolute w-20 h-20 bg-teal-400 rounded-full opacity-80 animate-[pulse-slow_3s_ease-in-out_infinite]"></div>
+                    <div class="absolute w-16 h-16 bg-blue-400 rounded-full -top-4 -left-4 opacity-70 animate-[bounce-slow_2s_ease-in-out_infinite]" style="animation-delay: 0.5s;"></div>
+                    <div class="absolute w-12 h-12 bg-purple-400 rounded-full -bottom-6 -right-6 opacity-60 animate-[spin-slow_10s_linear_infinite]" style="animation-delay: 1s;"></div>
+
+                    <!-- Connecting lines / paths -->
+                    <div class="absolute w-full h-1 bg-teal-300 opacity-50 z-10 transform -rotate-45 animate-[line-glow_2s_ease-in-out_infinite]" style="width: 120%; height: 2px;"></div>
+                    <div class="absolute w-full h-1 bg-blue-300 opacity-50 z-10 transform rotate-45 animate-[line-glow_2s_ease-in-out_infinite]" style="width: 120%; height: 2px; animation-delay: 0.2s;"></div>
+                    <div class="absolute w-1 h-full bg-purple-300 opacity-50 z-10 transform -rotate-12 animate-[line-glow_2s_ease-in-out_infinite]" style="height: 120%; width: 2px; animation-delay: 0.4s;"></div>
+
+                    <!-- Small, subtle nodes/data points -->
+                    <div class="absolute w-2 h-2 bg-white rounded-full top-1/4 left-1/4 shadow-sm animate-[flicker_1.5s_ease-in-out_infinite]" style="animation-delay: 0.2s;"></div>
+                    <div class="absolute w-2 h-2 bg-white rounded-full top-3/4 right-1/4 shadow-sm animate-[flicker_1.5s_ease-in-out_infinite]" style="animation-delay: 0.7s;"></div>
+                    <div class="absolute w-2 h-2 bg-white rounded-full bottom-1/3 left-2/3 shadow-sm animate-[flicker_1.5s_ease-in-out_infinite]" style="animation-delay: 1.2s;"></div>
                 </div>
             </div>
         </section>
