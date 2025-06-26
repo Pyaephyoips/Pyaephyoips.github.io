@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Resume | Pyae Phyo Aung | IT Engineer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
@@ -94,9 +94,8 @@
 
     <main class="container mx-auto px-6 py-12">
         <section id="about" class="text-center mb-24">
-            <div class="w-24 h-24 mx-auto mb-4 bg-gray-300 rounded-full flex items-center justify-center">
-                <span class="text-gray-500 text-xs">Photo</span>
-            </div>
+            <!-- Replace the src with the actual URL of your photo -->
+            <img src="https://bebestglobal-mm.com/wp-content/uploads/2025/06/profile.jpg" alt="Pyae Phyo Aung's Photo" class="w-24 h-24 mx-auto mb-4 rounded-full object-cover">
             <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Pyae Phyo Aung</h1>
             <p class="text-xl text-teal-700 mt-2">IT Engineer</p>
             <div class="mt-4 flex justify-center items-center space-x-6 text-sm">
@@ -179,7 +178,7 @@
     </footer>
 
 
-<script>
+<script defer>
 document.addEventListener('DOMContentLoaded', function() {
     
     const skillsData = {
