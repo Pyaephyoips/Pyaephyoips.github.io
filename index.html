@@ -1,452 +1,86 @@
-<!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Resume | Pyae Phyo Aung | IT Engineer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
-    <!-- Chosen Palette: "Warm Neutral" (Beige, Slate, with a subtle Teal accent) -->
-    <!-- Application Structure Plan: A single-page, vertically scrolling interactive portfolio. Key sections (About, Skills, Experience, Certifications) are accessible via a sticky navigation bar for quick access. The structure prioritizes user engagement and scannability over a traditional linear resume format. The Skills section features an interactive radar chart for a high-level overview and clickable filters for detailed exploration. The Experience section is presented as a visual, collapsible timeline to show career progression without overwhelming the user. This design allows recruiters to quickly grasp key strengths and delve into details as needed, making it more effective than a static document. -->
-    <!-- Visualization & Content Choices: 
-        - Profile -> Inform -> Text Block -> Static -> Clear, concise introduction.
-        - Skills -> Compare/Organize -> Radar Chart (Chart.js) & Filtered Lists (JS) -> Interactive (Hover on chart, Click on filters) -> Provides a quick visual summary of core competencies and an organized way to view detailed technical skills.
-        - Experience -> Change/Organize -> Vertical Collapsible Timeline (HTML/CSS/JS) -> Interactive (Click to expand/collapse) -> Visually represents career progression and allows users to control information density, improving readability.
-        - Certifications/Achievements -> Inform -> Styled Cards (HTML/Tailwind) -> Static -> Cleanly presents credentials and accomplishments.
-        - All choices are designed to be responsive, interactive, and enhance understanding of the resume content. -->
-    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #FDFBF8;
-            color: #4A5568;
-        }
-        .nav-link {
-            transition: color 0.3s, border-bottom-color 0.3s;
-            border-bottom: 2px solid transparent;
-        }
-        .nav-link:hover, .nav-link.active {
-            color: #2C7A7B;
-            border-bottom-color: #2C7A7B;
-        }
-        .skill-btn {
-            transition: background-color 0.3s, color 0.3s;
-        }
-        .skill-btn.active {
-            background-color: #2C7A7B;
-            color: #ffffff;
-        }
-        .timeline-item-content {
-            transition: max-height 0.5s ease-in-out, opacity 0.5s ease-in-out;
-            max-height: 0;
-            opacity: 0;
-            overflow: hidden;
-        }
-        .timeline-item-content.open {
-            max-height: 1000px;
-            opacity: 1;
-        }
-        .chart-container {
-            position: relative;
-            width: 100%;
-            max-width: 500px;
-            margin-left: auto;
-            margin-right: auto;
-            height: 300px;
-            max-height: 400px;
-        }
-        @media (min-width: 768px) {
-            .chart-container {
-                height: 400px;
-            }
-        }
-
-        /* Keyframes for infrastructure animations */
-        @keyframes pulse-slow {
-            0%, 100% { transform: scale(1); opacity: 0.8; }
-            50% { transform: scale(1.05); opacity: 1; }
-        }
-
-        @keyframes bounce-slow {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        }
-
-        @keyframes spin-slow {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @keyframes line-glow {
-            0%, 100% { opacity: 0.5; box-shadow: 0 0 5px rgba(44, 122, 123, 0.3); }
-            50% { opacity: 1; box-shadow: 0 0 15px rgba(44, 122, 123, 0.7); }
-        }
-
-        @keyframes flicker {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sky Bridge Business Solution</title>
+  <meta name="description" content="Sky Bridge Business Solution - ERP, Website, POS, Ecommerce, IT Infra & Security services." />
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body class="antialiased">
+<body>
+  <header class="topbar">
+    <div class="container nav">
+      <h1>Sky Bridge Business Solution</h1>
+      <nav>
+        <a href="#about">About</a>
+        <a href="#services">Services</a>
+        <a href="#projects">Projects</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </div>
+  </header>
 
-    <header class="bg-white/80 backdrop-blur-lg sticky top-0 z-50 shadow-sm">
-        <nav class="container mx-auto px-6 py-3 flex justify-between items-center">
-            <div class="text-xl font-bold text-gray-800">PYAE PHYO AUNG</div>
-            <div class="hidden md:flex space-x-8">
-                <a href="#about" class="nav-link">About</a>
-                <a href="#skills" class="nav-link">Skills</a>
-                <a href="#experience" class="nav-link">Experience</a>
-                <a href="#certs" class="nav-link">Certifications</a>
-                <a href="#achievements" class="nav-link">Achievements</a>
-            </div>
-            <div class="md:hidden">
-                <button id="menu-btn" class="text-gray-700 focus:outline-none">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                </button>
-            </div>
-        </nav>
-        <div id="mobile-menu" class="hidden md:hidden">
-            <a href="#about" class="block py-2 px-4 text-sm hover:bg-gray-200">About</a>
-            <a href="#skills" class="block py-2 px-4 text-sm hover:bg-gray-200">Skills</a>
-            <a href="#experience" class="block py-2 px-4 text-sm hover:bg-gray-200">Experience</a>
-            <a href="#certs" class="block py-2 px-4 text-sm hover:bg-gray-200">Certifications</a>
-            <a href="#achievements" class="block py-2 px-4 text-sm hover:bg-gray-200">Achievements</a>
-        </div>
-    </header>
+  <section class="hero">
+    <div class="container">
+      <h2>Smart ERP & IT Solutions for Growing Businesses</h2>
+      <p>We help companies improve operations through Odoo ERP, websites, ecommerce, POS, and IT infrastructure/security solutions.</p>
+      <a class="btn" href="#contact">Get a Free Consultation</a>
+    </div>
+  </section>
 
-    <main class="container mx-auto px-6 py-12">
-        <section id="about" class="text-center mb-24">
-            <!-- Updated src with the actual URL of your photo -->
-            <img src="https://bebestglobal-mm.com/wp-content/uploads/2025/06/profile.jpg" alt="Pyae Phyo Aung's Photo" class="w-24 h-24 mx-auto mb-4 rounded-full object-cover">
-            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Pyae Phyo Aung</h1>
-            <p class="text-xl text-teal-700 mt-2">IT Engineer</p>
-            <div class="mt-4 flex justify-center items-center space-x-6 text-sm">
-                <a href="mailto:pyaephyoaung2019@gmail.com" class="hover:text-teal-700">pyaephyoaung2019@gmail.com</a>
-                <span>|</span>
-                <a href="https://linkedin.com/in/p-phyoaung/" target="_blank" class="hover:text-teal-700">LinkedIn</a>
-                <span>|</span>
-                <span>Chiang Mai, Thailand</span>
-            </div>
-            <p class="max-w-3xl mx-auto mt-8 text-lg text-gray-600 leading-relaxed">
-                Highly experienced and results-oriented IT Engineer with over 10 years of expertise in managing secure, high-performance IT systems and networks. Proven track record in optimizing infrastructure, enhancing security, and leading technical teams to success. Seeking to leverage extensive infrastructure and security knowledge to contribute to dynamic organizations in Thailand and Singapore.
-            </p>
-        </section>
+  <section id="about" class="section">
+    <div class="container">
+      <h3>About Us</h3>
+      <p>Sky Bridge Business Solution is a professional technology service provider focused on ERP implementation and digital transformation.</p>
+      <p><strong>Founder:</strong> Pyae Phyo Aung</p>
+      <p><strong>Vision:</strong> To be a trusted technology partner for business digital transformation.</p>
+      <p><strong>Mission:</strong> To deliver quality services that ensure client satisfaction.</p>
+    </div>
+  </section>
 
-        <section id="skills" class="mb-24">
-            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">Skills Dashboard</h2>
-            <p class="text-center text-gray-600 mb-12 max-w-2xl mx-auto">Here is a visual overview of my core competencies. Use the filters to explore the specific technologies and platforms I have mastered throughout my career.</p>
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div class="chart-container">
-                    <canvas id="skillsChart"></canvas>
-                </div>
-                <div>
-                    <div class="flex flex-wrap justify-center gap-2 mb-6">
-                        <button data-skill="cloud" class="skill-btn active px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">Cloud</button>
-                        <button data-skill="networking" class="skill-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">Networking</button>
-                        <button data-skill="security" class="skill-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">Security</button>
-                        <button data-skill="virtualization" class="skill-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">Virtualization</button>
-                        <button data-skill="systems" class="skill-btn px-4 py-2 bg-gray-200 text-gray-700 rounded-full text-sm font-medium">Systems & Mgmt</button>
-                    </div>
-                    <div id="skills-content" class="p-6 bg-white rounded-lg shadow-md min-h-[200px]">
-                        <!-- JS will populate this -->
-                    </div>
-                </div>
-            </div>
+  <section id="services" class="section alt">
+    <div class="container">
+      <h3>Our Services</h3>
+      <ul class="grid">
+        <li>Odoo ERP Implementation & Customization</li>
+        <li>Website Development</li>
+        <li>Domain Selling & Management</li>
+        <li>POS Solutions</li>
+        <li>E-commerce Solutions</li>
+        <li>IT Infrastructure</li>
+        <li>IT Security Solutions</li>
+      </ul>
+    </div>
+  </section>
 
-            <!-- New Infrastructure Animation Section -->
-            <div class="mt-20 text-center max-w-4xl mx-auto">
-                <h3 class="text-2xl font-bold text-gray-700 mb-6">Visualizing Infrastructure Expertise</h3>
-                <p class="text-gray-600 mb-8">This abstract animation represents the interconnected nature of modern IT infrastructure, mirroring the complex systems I design, manage, and secure.</p>
-                <div class="relative w-full h-80 bg-gray-100 rounded-xl shadow-inner overflow-hidden flex items-center justify-center">
-                    <!-- Base elements for abstract infrastructure -->
-                    <div class="absolute w-20 h-20 bg-teal-400 rounded-full opacity-80 animate-[pulse-slow_3s_ease-in-out_infinite]"></div>
-                    <div class="absolute w-16 h-16 bg-blue-400 rounded-full -top-4 -left-4 opacity-70 animate-[bounce-slow_2s_ease-in-out_infinite]" style="animation-delay: 0.5s;"></div>
-                    <div class="absolute w-12 h-12 bg-purple-400 rounded-full -bottom-6 -right-6 opacity-60 animate-[spin-slow_10s_linear_infinite]" style="animation-delay: 1s;"></div>
+  <section id="projects" class="section">
+    <div class="container">
+      <h3>Selected Projects</h3>
+      <ul>
+        <li>Energetic Golden World – ERP Project</li>
+        <li>Alliance Recycle Group – ERP Project</li>
+        <li>MMBijin Business – Email Service & Website</li>
+        <li>Waihin Myanmar Mart (Oman) – ERP Project</li>
+        <li>Shinsunmi (Dubai) – ERP Project</li>
+        <li>Maker Mart – Ecommerce Project</li>
+        <li>One River – Website Project</li>
+        <li>Great United Green Energy Group Companies – ERP Projects</li>
+      </ul>
+    </div>
+  </section>
 
-                    <!-- Connecting lines / paths -->
-                    <div class="absolute w-full h-1 bg-teal-300 opacity-50 z-10 transform -rotate-45 animate-[line-glow_2s_ease-in-out_infinite]" style="width: 120%; height: 2px;"></div>
-                    <div class="absolute w-full h-1 bg-blue-300 opacity-50 z-10 transform rotate-45 animate-[line-glow_2s_ease-in-out_infinite]" style="width: 120%; height: 2px; animation-delay: 0.2s;"></div>
-                    <div class="absolute w-1 h-full bg-purple-300 opacity-50 z-10 transform -rotate-12 animate-[line-glow_2s_ease-in-out_infinite]" style="height: 120%; width: 2px; animation-delay: 0.4s;"></div>
+  <section id="contact" class="section alt">
+    <div class="container">
+      <h3>Contact</h3>
+      <p><strong>Email:</strong> <a href="mailto:pyaephyoaung@skybridgebs.com">pyaephyoaung@skybridgebs.com</a></p>
+      <p><strong>Phone:</strong> <a href="tel:+66612200929">+66612200929</a></p>
+    </div>
+  </section>
 
-                    <!-- Small, subtle nodes/data points -->
-                    <div class="absolute w-2 h-2 bg-white rounded-full top-1/4 left-1/4 shadow-sm animate-[flicker_1.5s_ease-in-out_infinite]" style="animation-delay: 0.2s;"></div>
-                    <div class="absolute w-2 h-2 bg-white rounded-full top-3/4 right-1/4 shadow-sm animate-[flicker_1.5s_ease-in-out_infinite]" style="animation-delay: 0.7s;"></div>
-                    <div class="absolute w-2 h-2 bg-white rounded-full bottom-1/3 left-2/3 shadow-sm animate-[flicker_1.5s_ease-in-out_infinite]" style="animation-delay: 1.2s;"></div>
-                </div>
-            </div>
-        </section>
-
-        <section id="experience" class="mb-24">
-            <h2 class="text-3xl font-bold text-center text-gray-800 mb-4">Experience Timeline</h2>
-            <p class="text-center text-gray-600 mb-12 max-w-2xl mx-auto">Explore my career journey and key responsibilities in each role. Click on any position to see more details.</p>
-            <div class="relative max-w-3xl mx-auto">
-                <div class="absolute left-1/2 w-0.5 h-full bg-teal-200 transform -translate-x-1/2"></div>
-                <div id="timeline-container" class="space-y-12">
-                   <!-- JS will populate this -->
-                </div>
-            </div>
-        </section>
-
-        <section id="certs" class="mb-24">
-            <h2 class="text-3xl font-bold text-center text-gray-800 mb-12">Certifications</h2>
-            <div id="certs-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                <!-- JS will populate this -->
-            </div>
-        </section>
-
-        <section id="achievements" class="mb-24">
-             <h2 class="text-3xl font-bold text-center text-gray-800 mb-12">Achievements</h2>
-             <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-8 transform hover:scale-105 transition-transform duration-300">
-                <p class="text-teal-600 font-semibold">Hackathon Achievement | Yoma Strategic Holdings</p>
-                <p class="text-2xl font-bold text-gray-800 my-2">3rd Place Winner</p>
-                <p class="text-gray-500 text-sm mb-4">Event: Yoma Strategic Holdings Hackathon | Date: September 15-17, 2023</p>
-                <ul class="space-y-2 text-gray-600 list-disc list-inside">
-                    <li>Collaborated effectively in a cross-functional team to innovate and develop a solution addressing a significant healthcare challenge.</li>
-                    <li>Demonstrated creativity, teamwork, and problem-solving skills in a highly competitive environment.</li>
-                    <li>Successfully developed a recognized prototype with potential impact, securing 3rd place among diverse teams.</li>
-                </ul>
-                <p class="mt-4 text-sm"><span class="font-semibold">Skills Utilized:</span> Innovation, Teamwork, Problem-Solving, Prototyping, Presentation</p>
-             </div>
-        </section>
-    </main>
-    
-    <footer class="bg-gray-800 text-white py-8">
-        <div class="container mx-auto px-6 text-center">
-            <p class="text-lg font-semibold">Get in Touch</p>
-            <p class="mt-2">Pyae Phyo Aung</p>
-            <div class="mt-4 flex justify-center items-center space-x-6 text-sm">
-                <a href="mailto:pyaephyoaung2019@gmail.com" class="hover:text-teal-300">pyaephyoaung2019@gmail.com</a>
-                <a href="https://linkedin.com/in/p-phyoaung/" target="_blank" class="hover:text-teal-300">linkedin.com/in/p-phyoaung</a>
-            </div>
-        </div>
-    </footer>
-
-
-<script defer>
-document.addEventListener('DOMContentLoaded', function() {
-    
-    const skillsData = {
-        cloud: ['Office 365 (Azure AD, Intune, SharePoint Online)', 'AWS'],
-        networking: ['LAN/Wi-Fi', 'WAN', 'SD-WAN (Meraki)', 'Cisco (Routers, Switches, Access Points, CUCM)', 'VLAN', 'BGP', 'MPLS'],
-        security: ['Firewalls (Fortinet, Palo Alto)', 'SSL/IPSec VPN', 'NAC', 'SIEM (Wazuh)', 'Incident Response', 'Vulnerability Management'],
-        virtualization: ['VMware (ESXi, VxRail)', 'Hyper-V', 'KVM'],
-        systems: ['Cisco CUCM', '3CX IP Phone', 'IT Process Optimization', 'Asset Management', 'License Administration', 'IT Documentation', 'Change Management', 'Team Leadership']
-    };
-
-    const experienceData = [
-        {
-            role: 'Senior IT Engineer',
-            company: 'HGICT Company - Myanmar',
-            period: 'Aug 2024 – Present',
-            side: 'right',
-            details: [
-                'Spearheaded ERP implementation projects, including Odoo and Microsoft Dynamics NAV, customizing solutions to align with diverse client business needs.',
-                'Managed successful POS software deployment and seamless integration for various retail and service sector clients.',
-                'Oversaw comprehensive IT infrastructure and network/system administration, ensuring robust stability, high availability, and scalability across multiple environments.',
-                'Delivered expert IT support services across a multitude of client environments, significantly enhancing system uptime and overall user satisfaction.',
-                'Contributed critically to HGICT\'s role as a Systems Integrator by effectively coordinating with cross-functional teams and external vendors to deliver seamless technology solutions.'
-            ]
-        },
-        {
-            role: 'Acting Infrastructure Manager',
-            company: 'Pun Hlaing Hospitals, Yangon',
-            period: 'Nov 2023 – Jul 2024',
-            side: 'left',
-            details: [
-                'Successfully led a team of IT engineers in the strategic design, implementation, and management of resilient IT infrastructures across multiple hospital locations.',
-                'Directed and optimized IT operations, encompassing complex infrastructure upgrades, preventative system maintenance, and critical vendor coordination for both domestic and international sites.',
-                'Developed and successfully implemented comprehensive IT documentation and robust disaster recovery strategies, significantly reducing potential business disruption and enhancing continuity.',
-                'Expertly managed and optimized Office 365 cloud services and complex hybrid server environments (Azure AD, AWS) to ensure peak performance and ironclad security.'
-            ]
-        },
-        {
-            role: 'Senior System Engineer',
-            company: 'Pun Hlaing Hospitals, Yangon',
-            period: 'Oct 2022 – Oct 2023',
-            side: 'right',
-            details: [
-                'Managed and optimized cloud services (AWS, Azure), Cisco networking, and Fortinet firewall configurations, ensuring robust and secure operations.',
-                'Administered Windows/Linux servers with a focus on ensuring high availability and reliability for critical systems.',
-                'Provided effective mentoring and leadership to the IT team, leading to improved response times for incidents and proactive system health monitoring.',
-                'Administered Azure, AWS, and Office 365 environments, including Exchange Online and Intune.',
-                'Optimized Cisco network systems (SD-WAN, Wi-Fi controller, routers) and Fortinet firewalls for enhanced performance.'
-            ]
-        },
-        {
-            role: 'Senior Security Engineer',
-            company: 'Pun Hlaing Hospitals, Yangon',
-            period: 'Oct 2021 – Sep 2022',
-            side: 'left',
-            details: [
-                'Managed and orchestrated incident response efforts, collaborating with security vendors to ensure strict compliance with security standards and protocols.',
-                'Conducted regular, in-depth security assessments, penetration testing, and comprehensive vulnerability management to identify and mitigate risks.',
-                'Successfully implemented and managed SIEM solutions and incident response procedures, significantly enhancing overall security operations.'
-            ]
-        },
-         {
-            role: 'Senior Network Engineer',
-            company: 'Yoma Strategic Holdings Ltd., Yangon',
-            period: 'Jan 2018 – Sep 2021',
-            side: 'right',
-            details: [
-                'Administered SSL/IPSec VPNs and implemented stringent firewall policies, ensuring secure and efficient connectivity for both remote and on-site users.',
-                'Managed critical cloud technologies and performed proactive system health monitoring to prevent potential risks and ensure operational continuity.',
-                'Designed and meticulously maintained Cisco-based network infrastructure, including SD-WAN (Meraki), advanced Layer 3 switching, and complex routing protocols (BGP, MPLS).',
-                'Administered and ensured reliable communication for telephony systems such as Cisco CUCM and 3CX.'
-            ]
-        },
-        {
-            role: 'IT Team Leader',
-            company: 'Serge Pun and Associate Co., Ltd., Yangon',
-            period: 'Aug 2013 – Dec 2017',
-            side: 'left',
-            details: [
-                'Led a cross-functional team, overseeing daily IT operations and ensuring seamless coordination with business units for successful delivery of IT services.',
-                'Designed and implemented significant network infrastructure improvements, providing regular, insightful reports on IT performance and project updates to senior management.'
-            ]
-        }
-    ];
-    
-    const certsData = [
-        'AWS Partner Accreditation (Technical)',
-        'AWS Systems Operations Course',
-        'Aviatrix Certified Engineer (Multi-Cloud Network Associate)',
-        'ICSI/CNSS Certified Network Security Specialist',
-        'Fundamentals of Predictive Project Management',
-        'AWS Cloud Quest Cloud Practitioner'
-    ];
-
-
-    const skillsContent = document.getElementById('skills-content');
-    const skillBtns = document.querySelectorAll('.skill-btn');
-
-    function updateSkills(skill) {
-        skillsContent.innerHTML = `<ul class="space-y-3 text-gray-600">${skillsData[skill].map(s => `<li class="flex items-start"><span class="text-teal-500 mr-3 mt-1">&#10003;</span><span>${s}</span></li>`).join('')}</ul>`;
-        skillBtns.forEach(btn => {
-            btn.classList.toggle('active', btn.dataset.skill === skill);
-        });
-    }
-
-    skillBtns.forEach(btn => {
-        btn.addEventListener('click', () => updateSkills(btn.dataset.skill));
-    });
-    
-    updateSkills('cloud');
-
-    const ctx = document.getElementById('skillsChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'radar',
-        data: {
-            labels: ['Cloud Platforms', 'Networking', 'Security', 'Virtualization', 'Systems & Mgmt', 'Leadership'],
-            datasets: [{
-                label: 'Core Competency',
-                data: [90, 95, 85, 80, 88, 92],
-                backgroundColor: 'rgba(44, 122, 123, 0.2)',
-                borderColor: 'rgba(44, 122, 123, 1)',
-                pointBackgroundColor: 'rgba(44, 122, 123, 1)',
-                pointBorderColor: '#fff',
-                pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: 'rgba(44, 122, 123, 1)'
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            scales: {
-                r: {
-                    angleLines: { color: 'rgba(0, 0, 0, 0.1)' },
-                    grid: { color: 'rgba(0, 0, 0, 0.1)' },
-                    pointLabels: { font: { size: 12 }, color: '#4A5568' },
-                    ticks: {
-                        backdropColor: 'transparent',
-                        color: '#999',
-                        stepSize: 20
-                    },
-                    suggestedMin: 0,
-                    suggestedMax: 100
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                }
-            }
-        }
-    });
-
-    const timelineContainer = document.getElementById('timeline-container');
-    experienceData.forEach((item, index) => {
-        const alignClass = item.side === 'right' ? 'md:ml-auto' : 'md:mr-auto';
-        const iconSide = item.side === 'right' ? 'md:left-1/2 md:-ml-4' : 'md:left-1/2 md:-ml-4';
-        const itemHTML = `
-            <div class="relative timeline-item">
-                <div class="absolute w-8 h-8 bg-white border-2 border-teal-500 rounded-full top-0 left-1/2 -ml-4 flex items-center justify-center">
-                    <div class="w-4 h-4 bg-teal-500 rounded-full"></div>
-                </div>
-                <div class="bg-white p-6 rounded-lg shadow-md w-full md:w-1/2 ${alignClass} cursor-pointer timeline-header">
-                    <p class="text-sm text-teal-600 font-semibold">${item.period}</p>
-                    <h3 class="text-xl font-bold text-gray-800 mt-1">${item.role}</h3>
-                    <p class="text-gray-500">${item.company}</p>
-                    <div class="timeline-item-content mt-4">
-                        <ul class="space-y-2 text-sm text-gray-600 list-disc list-inside">
-                            ${item.details.map(d => `<li>${d}</li>`).join('')}
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        `;
-        timelineContainer.innerHTML += itemHTML;
-    });
-
-    document.querySelectorAll('.timeline-header').forEach((header, index) => {
-        const content = header.querySelector('.timeline-item-content');
-        if (index === 0) { 
-            content.classList.add('open');
-        }
-        header.addEventListener('click', () => {
-            content.classList.toggle('open');
-        });
-    });
-    
-    const certsContainer = document.getElementById('certs-container');
-    certsData.forEach(cert => {
-        const certHTML = `
-            <div class="bg-white p-5 rounded-lg shadow-md flex items-center">
-                <div class="flex-shrink-0 mr-4">
-                    <div class="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center">
-                        <span class="text-xl text-teal-600">&#127941;</span>
-                    </div>
-                </div>
-                <p class="text-gray-700 font-medium">${cert}</p>
-            </div>
-        `;
-        certsContainer.innerHTML += certHTML;
-    });
-
-    const menuBtn = document.getElementById('menu-btn');
-    const mobileMenu = document.getElementById('mobile-menu');
-    menuBtn.addEventListener('click', () => {
-        mobileMenu.classList.toggle('hidden');
-    });
-
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function(e) {
-            e.preventDefault();
-            const targetId = this.getAttribute('href');
-            document.querySelector(targetId).scrollIntoView({
-                behavior: 'smooth'
-            });
-            if(mobileMenu.offsetParent !== null){
-                mobileMenu.classList.add('hidden');
-            }
-        });
-    });
-
-});
-</script>
-
+  <footer>
+    <div class="container">
+      © 2026 Sky Bridge Business Solution. All rights reserved.
+    </div>
+  </footer>
 </body>
 </html>
