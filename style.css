@@ -78,9 +78,7 @@ p {
   text-transform: lowercase;
 }
 
-.nav-links span,
 .intro,
-.section-title span,
 .label {
   color: var(--accent);
 }
@@ -267,6 +265,7 @@ main {
 
 .service-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -361,10 +360,75 @@ main {
 }
 
 .client-panel {
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 26px;
   background: var(--panel-soft);
+}
+
+.logo-marquee {
+  position: relative;
+  margin-top: 22px;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.logo-track {
+  display: flex;
+  width: max-content;
+  gap: 14px;
+  animation: logo-scroll 34s linear infinite;
+}
+
+.logo-track:hover {
+  animation-play-state: paused;
+}
+
+.logo-track span {
+  display: inline-flex;
+  min-width: 210px;
+  min-height: 76px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: rgba(8, 17, 31, 0.48);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 800;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
+}
+
+.logo-track b {
+  display: grid;
+  min-width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(82, 224, 196, 0.44);
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+@keyframes logo-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-track {
+    animation: none;
+    flex-wrap: wrap;
+  }
 }
 
 .client-grid {
@@ -418,7 +482,8 @@ main {
   }
 
   .about-grid,
-  .featured-work {
+  .featured-work,
+  .service-grid {
     grid-template-columns: 1fr;
   }
 
