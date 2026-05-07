@@ -20,6 +20,13 @@ html {
   scroll-behavior: smooth;
 }
 
+#founder,
+#solutions,
+#clients,
+#contact {
+  scroll-margin-top: 110px;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -308,13 +315,14 @@ a {
 .contact-section {
   width: min(1180px, calc(100% - 40px));
   margin: 0 auto;
-  padding: clamp(72px, 9vw, 118px) 0;
+  padding: clamp(58px, 7vw, 92px) 0;
 }
 
 .founder-section {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(320px, 0.7fr);
   gap: clamp(34px, 7vw, 96px);
+  padding-bottom: clamp(48px, 6vw, 74px);
 }
 
 .founder-title h2,
@@ -345,11 +353,12 @@ a {
 }
 
 .section-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(260px, 0.46fr);
-  gap: clamp(30px, 6vw, 80px);
-  align-items: end;
-  margin-bottom: 32px;
+  max-width: 820px;
+  margin-bottom: 28px;
+}
+
+.section-heading h2 {
+  max-width: 820px;
 }
 
 .solution-list {
