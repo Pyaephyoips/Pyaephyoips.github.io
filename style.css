@@ -24,7 +24,8 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Inter", Arial, sans-serif;
-  line-height: 1.6;
+  font-size: 17px;
+  line-height: 1.72;
 }
 
 a {
@@ -75,7 +76,7 @@ p {
   display: flex;
   gap: clamp(14px, 2.4vw, 28px);
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: clamp(0.9rem, 1vw, 1rem);
   font-weight: 800;
   text-transform: lowercase;
 }
@@ -146,7 +147,7 @@ main {
 
 .intro {
   margin-bottom: 18px;
-  font-size: 0.98rem;
+  font-size: clamp(1rem, 1.2vw, 1.1rem);
   font-weight: 800;
 }
 
@@ -160,7 +161,7 @@ main {
 
 .hero h1 {
   color: var(--heading);
-  font-size: clamp(3.3rem, 8vw, 6.8rem);
+  font-size: clamp(3.4rem, 8vw, 6.8rem);
   font-weight: 900;
 }
 
@@ -168,20 +169,21 @@ main {
   max-width: 920px;
   margin-top: 10px;
   color: #91a7c3;
-  font-size: clamp(2.35rem, 6vw, 5.4rem);
+  font-size: clamp(2.45rem, 6vw, 5.4rem);
   font-weight: 900;
 }
 
 .hero-copy {
-  max-width: 680px;
+  max-width: 760px;
   margin-top: 28px;
   color: var(--muted);
-  font-size: 1.05rem;
+  font-size: clamp(1.1rem, 1.5vw, 1.24rem);
 }
 
 .availability {
   margin-top: 28px;
   color: var(--accent);
+  font-size: clamp(1rem, 1.2vw, 1.12rem);
   font-weight: 800;
 }
 
@@ -196,6 +198,7 @@ main {
   border-radius: 6px;
   padding: 12px 18px;
   color: var(--accent);
+  font-size: 1rem;
   font-weight: 900;
   text-transform: lowercase;
 }
@@ -216,7 +219,7 @@ main {
   gap: 14px;
   margin: 0 0 34px;
   color: var(--heading);
-  font-size: clamp(1.65rem, 3vw, 2.2rem);
+  font-size: clamp(1.9rem, 3vw, 2.45rem);
   line-height: 1.1;
 }
 
@@ -248,6 +251,7 @@ main {
   display: grid;
   gap: 12px;
   color: var(--muted);
+  font-size: 1.03rem;
 }
 
 .quick-list li,
@@ -285,7 +289,7 @@ main {
 .client-panel h3 {
   margin: 0;
   color: var(--heading);
-  font-size: 1.35rem;
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
   line-height: 1.15;
 }
 
@@ -301,14 +305,15 @@ main {
   border-radius: 6px;
   padding: 5px 9px;
   color: var(--accent);
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   font-weight: 800;
 }
 
 .service-grid ul {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   color: var(--muted);
+  font-size: 1.02rem;
 }
 
 .mockup-grid {
@@ -334,7 +339,7 @@ main {
   justify-content: space-between;
   gap: 16px;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   font-weight: 900;
   text-transform: uppercase;
 }
@@ -360,14 +365,14 @@ main {
 .motion-card h3 {
   margin: 0;
   color: var(--heading);
-  font-size: 1.1rem;
+  font-size: 1.28rem;
   line-height: 1.2;
 }
 
 .motion-card p {
   margin-top: 10px;
   color: var(--muted);
-  font-size: 0.92rem;
+  font-size: 1rem;
 }
 
 .flow-node {
@@ -380,7 +385,7 @@ main {
   border-radius: 8px;
   background: rgba(16, 33, 56, 0.9);
   color: var(--text);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 900;
 }
 
@@ -573,7 +578,7 @@ main {
   border: 1px solid rgba(82, 224, 196, 0.42);
   border-radius: 6px;
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: 0.94rem;
   font-weight: 900;
 }
 
@@ -612,6 +617,7 @@ main {
   max-width: 760px;
   margin-top: 14px;
   color: var(--muted);
+  font-size: 1.04rem;
 }
 
 .capability-grid {
@@ -627,7 +633,7 @@ main {
   padding: 8px 12px;
   background: var(--accent-soft);
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: 0.95rem;
   font-weight: 800;
 }
 
@@ -672,9 +678,13 @@ main {
 
 .label {
   margin-bottom: 10px;
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   font-weight: 900;
   text-transform: lowercase;
+}
+
+.work-copy p:not(.label) {
+  font-size: 1.03rem;
 }
 
 .work-copy p:not(.label),
@@ -719,7 +729,7 @@ main {
   padding: 14px 16px;
   background: rgba(8, 17, 31, 0.48);
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 800;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.18);
 }
@@ -733,7 +743,7 @@ main {
   border-radius: 50%;
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 0.78rem;
+  font-size: 0.9rem;
   font-weight: 900;
 }
 
@@ -766,7 +776,7 @@ main {
   border-radius: 6px;
   padding: 10px;
   color: var(--muted);
-  font-size: 0.86rem;
+  font-size: 1rem;
   font-weight: 800;
   text-align: center;
 }
@@ -801,6 +811,7 @@ main {
   max-width: 720px;
   margin-top: 18px;
   color: var(--muted);
+  font-size: 1.06rem;
 }
 
 .contact-section h2 {
@@ -812,12 +823,13 @@ main {
   max-width: 620px;
   margin-top: 18px;
   color: var(--muted);
+  font-size: 1.08rem;
 }
 
 .site-footer {
   padding: 26px;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 800;
   text-align: center;
 }
@@ -852,11 +864,9 @@ main {
 
   .nav-links {
     gap: 12px;
-    font-size: 0.76rem;
-  }
-
-  .nav-links span {
-    display: none;
+    font-size: 0.88rem;
+    overflow-x: auto;
+    padding-bottom: 4px;
   }
 
   main {
@@ -864,11 +874,19 @@ main {
   }
 
   .hero h1 {
-    font-size: 3.15rem;
+    font-size: clamp(3rem, 14vw, 4.4rem);
   }
 
   .hero h2 {
-    font-size: 2.35rem;
+    font-size: clamp(2.05rem, 10vw, 3.1rem);
+  }
+
+  .hero-copy {
+    font-size: 1.08rem;
+  }
+
+  .content-section {
+    padding: 64px 0;
   }
 
   .section-title::after {
