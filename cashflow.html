@@ -203,7 +203,7 @@
           <option value="inflow">Inflow (+)</option>
           <option value="outflow">Outflow (−)</option>
         </select>
-        <input type="number" id="entryAmount" placeholder="Amount (MMK)" min="0">
+        <input type="number" id="entryAmount" placeholder="Amount (THB)" min="0">
         <button class="btn-add" onclick="addEntry()">+ Add</button>
       </div>
     </div>
@@ -240,7 +240,7 @@
                 <option value="inflow">Inflow (+)</option>
                 <option value="outflow">Outflow (−)</option>
               </select>
-              <input type="number" id="extAmount" placeholder="Amount (MMK)" min="0">
+              <input type="number" id="extAmount" placeholder="Amount (THB)" min="0">
             </div>
             <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
               <button class="btn-confirm" onclick="confirmSlipEntry()">✔ Confirm &amp; Save</button>
@@ -269,7 +269,7 @@
     <div class="section-card">
       <div class="section-header">
         <h3>💼 Operating Activities</h3>
-        <span class="total" id="opTotal">0 MMK</span>
+        <span class="total" id="opTotal">฿0.00</span>
       </div>
       <table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Slip</th><th></th></tr></thead>
       <tbody id="opBody"></tbody></table>
@@ -277,7 +277,7 @@
     <div class="section-card">
       <div class="section-header">
         <h3>🏗 Investing Activities</h3>
-        <span class="total" id="invTotal">0 MMK</span>
+        <span class="total" id="invTotal">฿0.00</span>
       </div>
       <table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Slip</th><th></th></tr></thead>
       <tbody id="invBody"></tbody></table>
@@ -286,7 +286,7 @@
   <div class="section-card" style="margin-bottom:1rem">
     <div class="section-header">
       <h3>🏦 Financing Activities</h3>
-      <span class="total" id="finTotal">0 MMK</span>
+      <span class="total" id="finTotal">฿0.00</span>
     </div>
     <table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Slip</th><th></th></tr></thead>
     <tbody id="finBody"></tbody></table>
@@ -303,8 +303,8 @@
 <!-- Tesseract.js OCR (loaded from CDN) -->
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
-const fmt = n => Math.abs(n).toLocaleString() + ' MMK';
-const fmtS = n => (n >= 0 ? '+' : '-') + Math.abs(n).toLocaleString() + ' MMK';
+const fmt = n => '฿' + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtS = n => (n >= 0 ? '+' : '-') + '฿' + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 
 let entries = JSON.parse(localStorage.getItem('cf_entries') || '[]');
 let period = 'quarter';
@@ -407,57 +407,105 @@ async function runOCR(dataUrl) {
 
 function setOcrStatus(html) { document.getElementById('ocrStatus').innerHTML = html; }
 
-// ── Parse OCR text ──
+// ── Parse OCR text (optimised for Thai bank slips) ──
 function parseSlipText(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const fullText = text;
+  const lower = text.toLowerCase();
 
-  // Amount: find largest number that looks like a currency value
-  const numRe = /[\d,]+(?:\.\d{1,2})?/g;
-  let amounts = [];
-  lines.forEach(l => {
-    const matches = l.match(numRe);
-    if (matches) matches.forEach(m => {
-      const n = parseFloat(m.replace(/,/g, ''));
-      if (n >= 100) amounts.push(n);
-    });
-  });
-  amounts.sort((a, b) => b - a);
-  const amount = amounts[0] || '';
+  // ── Amount ──
+  // Thai slips label the total with keywords; prefer those lines first
+  const amountLabelRe = /(?:amount|total|จำนวน|ยอด|รวม|thb|baht|฿)\s*:?\s*([\d,]+(?:\.\d{1,2})?)/i;
+  // Also match standalone money patterns like "1,234.56" or "฿1234.56"
+  const moneyRe = /฿?\s*([\d,]{1,10}(?:\.\d{2}))/g;
 
-  // Date: look for common patterns
-  const datePats = [
-    /(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/,
-    /(\d{1,2})[-\/\.](\d{1,2})[-\/\.](\d{4})/,
-    /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i,
-  ];
-  let date = new Date().toISOString().slice(0, 10);
+  let amount = '';
+
+  // First pass: look for labelled amount on same line
   for (const line of lines) {
-    for (const pat of datePats) {
-      const m = line.match(pat);
+    const m = line.match(amountLabelRe);
+    if (m) { amount = parseFloat(m[1].replace(/,/g, '')); break; }
+  }
+
+  // Second pass: collect all decimal numbers (x.xx) — Thai slips almost always show THB with 2dp
+  if (!amount) {
+    let decAmounts = [];
+    let mm;
+    while ((mm = moneyRe.exec(fullText)) !== null) {
+      const n = parseFloat(mm[1].replace(/,/g, ''));
+      if (n >= 1) decAmounts.push(n);
+    }
+    // The transfer/total amount is usually the largest
+    decAmounts.sort((a, b) => b - a);
+    if (decAmounts.length) amount = decAmounts[0];
+  }
+
+  // Third pass: any number >= 1 as fallback
+  if (!amount) {
+    let allNums = [];
+    lines.forEach(l => {
+      const ms = l.match(/[\d,]+(?:\.\d{1,2})?/g);
+      if (ms) ms.forEach(m => { const n = parseFloat(m.replace(/,/g,'')); if (n >= 1) allNums.push(n); });
+    });
+    allNums.sort((a,b) => b-a);
+    if (allNums.length) amount = allNums[0];
+  }
+
+  // ── Date ──
+  // Thai slips: DD/MM/YYYY, DD/MM/YY, YYYY-MM-DD, "12 Jan 2025", Buddhist year (256x → subtract 543)
+  let date = new Date().toISOString().slice(0, 10);
+  const datePatterns = [
+    { re: /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/, fn: m => `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` },
+    { re: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/, fn: m => {
+        const y = parseInt(m[3]) > 2400 ? parseInt(m[3])-543 : parseInt(m[3]);
+        return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    }},
+    { re: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})/, fn: m => {
+        const y = parseInt(m[3]) + (parseInt(m[3]) > 50 ? 1900 : 2000);
+        return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    }},
+    { re: /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})/i,
+      fn: m => { const d = new Date(`${m[1]} ${m[2]} ${m[3]}`); return isNaN(d)?null:d.toISOString().slice(0,10); }},
+  ];
+  outer: for (const line of lines) {
+    for (const { re, fn } of datePatterns) {
+      const m = line.match(re);
       if (m) {
-        try {
-          const d = new Date(line.match(pat)[0]);
-          if (!isNaN(d)) { date = d.toISOString().slice(0, 10); break; }
-        } catch {}
+        try { const r = fn(m); if (r && !isNaN(new Date(r))) { date = r; break outer; } } catch {}
       }
     }
   }
 
-  // Description: first meaningful line (skip short lines, numbers-only)
-  const descLine = lines.find(l => l.length > 4 && !/^[\d\s\W]+$/.test(l) && !/total|amount|mmk|kyat/i.test(l)) || 'Slip Entry';
+  // ── Description ──
+  // Try to find sender/receiver name or slip type label from common Thai bank fields
+  const descLabelRe = /(?:from|to|sender|receiver|ref|รายการ|ผู้โอน|ผู้รับ|บัญชี|ธนาคาร|bank|transfer|payment|slip)\s*:?\s*(.+)/i;
+  let desc = '';
+  for (const line of lines) {
+    const m = line.match(descLabelRe);
+    if (m && m[1].trim().length > 2) { desc = m[1].trim().replace(/\s+/g,' ').slice(0,60); break; }
+  }
+  // Fallback: first line that looks like a name/label (not a number, not too short)
+  if (!desc) {
+    desc = lines.find(l =>
+      l.length >= 4 &&
+      !/^[\d\s\W]+$/.test(l) &&
+      !/^\d{4}[\-\/]\d/.test(l) &&
+      !/(?:thb|฿|baht|total|amount|จำนวน)/i.test(l)
+    ) || 'Slip Entry';
+    desc = desc.slice(0, 60);
+  }
 
-  // Type hint: look for keywords
+  // ── Type hint ──
   let type = 'outflow';
-  const fullText = text.toLowerCase();
-  if (/receipt|received|income|sale|revenue|deposit|credit/.test(fullText)) type = 'inflow';
-  if (/payment|purchase|expense|fee|charge|debit|cost|paid/.test(fullText)) type = 'outflow';
+  if (/receipt|received|income|sale|revenue|deposit|credit|โอนเข้า|รับเงิน|เงินเข้า/.test(lower)) type = 'inflow';
+  if (/payment|purchase|expense|fee|charge|debit|cost|paid|โอนออก|จ่าย|ชำระ/.test(lower)) type = 'outflow';
 
-  // Activity hint
+  // ── Activity hint ──
   let activity = 'Operating';
-  if (/loan|borrow|repay|finance|mortgage/.test(fullText)) activity = 'Financing';
-  if (/equipment|machine|asset|invest|property/.test(fullText)) activity = 'Investing';
+  if (/loan|borrow|repay|finance|mortgage|กู้|สินเชื่อ/.test(lower)) activity = 'Financing';
+  if (/equipment|machine|asset|invest|property|ลงทุน|ทรัพย์สิน/.test(lower)) activity = 'Investing';
 
-  return { date, desc: descLine, amount, type, activity };
+  return { date, desc, amount, type, activity };
 }
 
 function fillExtractedForm({ date, desc, amount, type, activity }) {
@@ -598,20 +646,20 @@ function loadSampleData() {
   const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0');
   const pm = String(now.getMonth()).padStart(2,'0') || '01';
   const samples = [
-    { date:`${y}-${m}-01`, desc:'Food Sales - Week 1',   activity:'Operating', type:'inflow',  amount:850000  },
-    { date:`${y}-${m}-08`, desc:'Food Sales - Week 2',   activity:'Operating', type:'inflow',  amount:920000  },
-    { date:`${y}-${m}-15`, desc:'Food Sales - Week 3',   activity:'Operating', type:'inflow',  amount:780000  },
-    { date:`${y}-${m}-22`, desc:'Food Sales - Week 4',   activity:'Operating', type:'inflow',  amount:1050000 },
-    { date:`${y}-${m}-05`, desc:'Ingredient Purchase',   activity:'Operating', type:'outflow', amount:430000  },
-    { date:`${y}-${m}-12`, desc:'Staff Salaries',        activity:'Operating', type:'outflow', amount:600000  },
-    { date:`${y}-${m}-14`, desc:'Utilities & Rent',      activity:'Operating', type:'outflow', amount:250000  },
-    { date:`${y}-${m}-20`, desc:'Packaging & Supplies',  activity:'Operating', type:'outflow', amount:80000   },
-    { date:`${y}-${m}-10`, desc:'New Cooking Equipment', activity:'Investing', type:'outflow', amount:1200000 },
-    { date:`${y}-${m}-25`, desc:'Equipment Sale (old)',  activity:'Investing', type:'inflow',  amount:150000  },
-    { date:`${y}-${m}-03`, desc:'Bank Loan Received',    activity:'Financing', type:'inflow',  amount:2000000 },
-    { date:`${y}-${m}-28`, desc:'Loan Repayment',        activity:'Financing', type:'outflow', amount:200000  },
-    { date:`${y}-${pm}-05`, desc:'Food Sales (prev)',    activity:'Operating', type:'inflow',  amount:3100000 },
-    { date:`${y}-${pm}-10`, desc:'Expenses (prev)',      activity:'Operating', type:'outflow', amount:1500000 },
+    { date:`${y}-${m}-01`, desc:'Food Sales - Week 1',   activity:'Operating', type:'inflow',  amount:28500  },
+    { date:`${y}-${m}-08`, desc:'Food Sales - Week 2',   activity:'Operating', type:'inflow',  amount:31200  },
+    { date:`${y}-${m}-15`, desc:'Food Sales - Week 3',   activity:'Operating', type:'inflow',  amount:27800  },
+    { date:`${y}-${m}-22`, desc:'Food Sales - Week 4',   activity:'Operating', type:'inflow',  amount:35000  },
+    { date:`${y}-${m}-05`, desc:'Ingredient Purchase',   activity:'Operating', type:'outflow', amount:14300  },
+    { date:`${y}-${m}-12`, desc:'Staff Salaries',        activity:'Operating', type:'outflow', amount:20000  },
+    { date:`${y}-${m}-14`, desc:'Utilities & Rent',      activity:'Operating', type:'outflow', amount:8500   },
+    { date:`${y}-${m}-20`, desc:'Packaging & Supplies',  activity:'Operating', type:'outflow', amount:2700   },
+    { date:`${y}-${m}-10`, desc:'New Cooking Equipment', activity:'Investing', type:'outflow', amount:45000  },
+    { date:`${y}-${m}-25`, desc:'Equipment Sale (old)',  activity:'Investing', type:'inflow',  amount:8000   },
+    { date:`${y}-${m}-03`, desc:'Bank Loan Received',    activity:'Financing', type:'inflow',  amount:100000 },
+    { date:`${y}-${m}-28`, desc:'Loan Repayment',        activity:'Financing', type:'outflow', amount:8000   },
+    { date:`${y}-${pm}-05`, desc:'Food Sales (prev)',    activity:'Operating', type:'inflow',  amount:105000 },
+    { date:`${y}-${pm}-10`, desc:'Expenses (prev)',      activity:'Operating', type:'outflow', amount:52000  },
   ];
   samples.forEach(s => entries.push({ id: Date.now() + Math.random(), ...s }));
   save(); render();
