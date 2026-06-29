@@ -242,6 +242,7 @@
               </select>
               <input type="number" id="extAmount" placeholder="Amount (THB)" min="0">
             </div>
+            <div id="vatInfo" style="display:none;font-size:0.75rem;color:var(--blue);margin-bottom:0.4rem;padding:0.3rem 0.5rem;background:rgba(56,189,248,.08);border-radius:6px;"></div>
             <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
               <button class="btn-confirm" onclick="confirmSlipEntry()">✔ Confirm &amp; Save</button>
               <button class="btn-rescan" onclick="resetSlip()">✕ Cancel</button>
@@ -407,114 +408,146 @@ async function runOCR(dataUrl) {
 
 function setOcrStatus(html) { document.getElementById('ocrStatus').innerHTML = html; }
 
-// ── Parse OCR text (optimised for Thai bank slips) ──
+// ── Parse OCR text — Thai retail receipts, bank slips, PromptPay ──
 function parseSlipText(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const fullText = text;
   const lower = text.toLowerCase();
 
   // ── Amount ──
-  // Thai slips label the total with keywords; prefer those lines first
-  const amountLabelRe = /(?:amount|total|จำนวน|ยอด|รวม|thb|baht|฿)\s*:?\s*([\d,]+(?:\.\d{1,2})?)/i;
-  // Also match standalone money patterns like "1,234.56" or "฿1234.56"
-  const moneyRe = /฿?\s*([\d,]{1,10}(?:\.\d{2}))/g;
-
+  // Priority 1: "ยอดรวม" line  (Thai retail receipts — most common)
+  //             e.g. "ยอดรวม   473.00"
   let amount = '';
-
-  // First pass: look for labelled amount on same line
   for (const line of lines) {
-    const m = line.match(amountLabelRe);
-    if (m) { amount = parseFloat(m[1].replace(/,/g, '')); break; }
+    const m = line.match(/ยอดรวม[\s:]*([฿]?\s*[\d,]+(?:\.\d{1,2})?)/);
+    if (m) { amount = parseFloat(m[1].replace(/[฿,\s]/g,'')); break; }
   }
 
-  // Second pass: collect all decimal numbers (x.xx) — Thai slips almost always show THB with 2dp
+  // Priority 2: other total-label keywords on the same line
+  if (!amount) {
+    const totalRe = /(?:total|จำนวนเงิน|จำนวน|ยอดชำระ|ยอดสุทธิ|net\s*amount|grand\s*total|รวมทั้งสิ้น|thb|baht|฿)\s*:?\s*([฿]?\s*[\d,]+(?:\.\d{1,2})?)/i;
+    for (const line of lines) {
+      const m = line.match(totalRe);
+      if (m) { amount = parseFloat(m[1].replace(/[฿,\s]/g,'')); break; }
+    }
+  }
+
+  // Priority 3: largest decimal number (x.xx) on page — transfer slips show the amount as a prominent decimal
   if (!amount) {
     let decAmounts = [];
+    const moneyRe = /(?<![.\d])([\d,]{1,10}\.\d{2})(?![.\d])/g;
     let mm;
-    while ((mm = moneyRe.exec(fullText)) !== null) {
-      const n = parseFloat(mm[1].replace(/,/g, ''));
+    while ((mm = moneyRe.exec(text)) !== null) {
+      const n = parseFloat(mm[1].replace(/,/g,''));
       if (n >= 1) decAmounts.push(n);
     }
-    // The transfer/total amount is usually the largest
-    decAmounts.sort((a, b) => b - a);
+    decAmounts.sort((a,b) => b-a);
     if (decAmounts.length) amount = decAmounts[0];
   }
 
-  // Third pass: any number >= 1 as fallback
+  // Priority 4: largest plain integer >= 10 as last resort
   if (!amount) {
-    let allNums = [];
+    let nums = [];
     lines.forEach(l => {
-      const ms = l.match(/[\d,]+(?:\.\d{1,2})?/g);
-      if (ms) ms.forEach(m => { const n = parseFloat(m.replace(/,/g,'')); if (n >= 1) allNums.push(n); });
+      (l.match(/\b\d[\d,]*\b/g) || []).forEach(m => {
+        const n = parseFloat(m.replace(/,/g,''));
+        if (n >= 10) nums.push(n);
+      });
     });
-    allNums.sort((a,b) => b-a);
-    if (allNums.length) amount = allNums[0];
+    nums.sort((a,b) => b-a);
+    if (nums.length) amount = nums[0];
   }
 
   // ── Date ──
-  // Thai slips: DD/MM/YYYY, DD/MM/YY, YYYY-MM-DD, "12 Jan 2025", Buddhist year (256x → subtract 543)
-  let date = new Date().toISOString().slice(0, 10);
+  // Handles Buddhist year (256x/2567+ → subtract 543), DD/MM/YYYY, YYYY-MM-DD, DD Mon YYYY
+  let date = new Date().toISOString().slice(0,10);
+  const buddhistToAD = y => parseInt(y) > 2400 ? parseInt(y)-543 : parseInt(y);
+  const pad = n => String(n).padStart(2,'0');
+
   const datePatterns = [
-    { re: /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/, fn: m => `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` },
-    { re: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/, fn: m => {
-        const y = parseInt(m[3]) > 2400 ? parseInt(m[3])-543 : parseInt(m[3]);
-        return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-    }},
-    { re: /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})/, fn: m => {
-        const y = parseInt(m[3]) + (parseInt(m[3]) > 50 ? 1900 : 2000);
-        return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-    }},
-    { re: /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{4})/i,
-      fn: m => { const d = new Date(`${m[1]} ${m[2]} ${m[3]}`); return isNaN(d)?null:d.toISOString().slice(0,10); }},
+    // DD/MM/YYYY or DD/MM/BBBB (Buddhist)  e.g. 29/06/2569
+    { re: /\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/,
+      fn: m => { const y=buddhistToAD(m[3]); return `${y}-${pad(m[2])}-${pad(m[1])}`; } },
+    // YYYY/MM/DD or BBBB/MM/DD
+    { re: /\b(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\b/,
+      fn: m => { const y=buddhistToAD(m[1]); return `${y}-${pad(m[2])}-${pad(m[3])}`; } },
+    // DD/MM/YY
+    { re: /\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})\b/,
+      fn: m => { const y=parseInt(m[3])+(parseInt(m[3])>50?1900:2000); return `${y}-${pad(m[2])}-${pad(m[1])}`; } },
+    // "29 Jun 2025" or "29 มิ.ย. 2568"
+    { re: /(\d{1,2})\s+([A-Za-zก-ๆ]{2,}\.?)\s+(\d{4})/,
+      fn: m => { const d=new Date(`${m[1]} ${m[2].replace(/\./g,'')} ${buddhistToAD(m[3])}`); return isNaN(d)?null:d.toISOString().slice(0,10); } },
   ];
   outer: for (const line of lines) {
-    for (const { re, fn } of datePatterns) {
+    for (const {re, fn} of datePatterns) {
       const m = line.match(re);
-      if (m) {
-        try { const r = fn(m); if (r && !isNaN(new Date(r))) { date = r; break outer; } } catch {}
-      }
+      if (m) { try { const r=fn(m); if(r && !isNaN(new Date(r))){ date=r; break outer; } } catch {} }
     }
   }
 
-  // ── Description ──
-  // Try to find sender/receiver name or slip type label from common Thai bank fields
-  const descLabelRe = /(?:from|to|sender|receiver|ref|รายการ|ผู้โอน|ผู้รับ|บัญชี|ธนาคาร|bank|transfer|payment|slip)\s*:?\s*(.+)/i;
-  let desc = '';
+  // ── VAT ──
+  // Extract VAT amount if present (ภพ. / VAT / ภาษีมูลค่าเพิ่ม)
+  let vat = 0;
   for (const line of lines) {
-    const m = line.match(descLabelRe);
-    if (m && m[1].trim().length > 2) { desc = m[1].trim().replace(/\s+/g,' ').slice(0,60); break; }
+    const m = line.match(/(?:ภพ\.|vat|ภาษีมูลค่าเพิ่ม)\s*:?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    if (m) { vat = parseFloat(m[1].replace(/,/g,'')); break; }
   }
-  // Fallback: first line that looks like a name/label (not a number, not too short)
+
+  // ── Description ──
+  // Try: store/company name from first meaningful Thai/English line at top of receipt
+  // Skip lines that look like addresses, tax IDs, reg IDs, or are all numbers
+  const skipRe = /(?:tax\s*id|reg\s*id|เลขที่|สาขา|branch|\d{5}|ม\.\d|ต\.|อ\.|จ\.|\d{3}-\d)/i;
+  let desc = '';
+
+  // Look for company/store name: usually first line with Thai chars, not too short, not an address pattern
+  for (const line of lines) {
+    if (line.length < 3) continue;
+    if (skipRe.test(line)) continue;
+    if (/^[\d\s\W]+$/.test(line)) continue;
+    // Prefer lines with Thai text that look like names
+    if (/[ก-ๆ]/.test(line) || /[A-Za-z]{3,}/.test(line)) {
+      // Strip leading store codes like "บจก." "ห้าง" etc — keep the name part
+      desc = line.replace(/^(?:บจก\.|บจ\.|หจก\.|ห้าง|บริษัท|ร้าน)\s*/i,'').slice(0,60);
+      break;
+    }
+  }
+
+  // Fallback: first non-numeric line
   if (!desc) {
-    desc = lines.find(l =>
-      l.length >= 4 &&
-      !/^[\d\s\W]+$/.test(l) &&
-      !/^\d{4}[\-\/]\d/.test(l) &&
-      !/(?:thb|฿|baht|total|amount|จำนวน)/i.test(l)
-    ) || 'Slip Entry';
-    desc = desc.slice(0, 60);
+    desc = (lines.find(l => l.length >= 4 && !/^[\d\s\W]+$/.test(l)) || 'Slip Entry').slice(0,60);
   }
+
+  // Append VAT note to description if found
+  if (vat > 0) desc += ` (VAT ฿${vat.toFixed(2)})`;
 
   // ── Type hint ──
-  let type = 'outflow';
+  let type = 'outflow';  // retail receipts = you paid = outflow
   if (/receipt|received|income|sale|revenue|deposit|credit|โอนเข้า|รับเงิน|เงินเข้า/.test(lower)) type = 'inflow';
-  if (/payment|purchase|expense|fee|charge|debit|cost|paid|โอนออก|จ่าย|ชำระ/.test(lower)) type = 'outflow';
+  // Explicit payment/purchase keywords → outflow (default already)
 
-  // ── Activity hint ──
+  // ── Activity ──
   let activity = 'Operating';
   if (/loan|borrow|repay|finance|mortgage|กู้|สินเชื่อ/.test(lower)) activity = 'Financing';
   if (/equipment|machine|asset|invest|property|ลงทุน|ทรัพย์สิน/.test(lower)) activity = 'Investing';
 
-  return { date, desc, amount, type, activity };
+  return { date, desc, amount, type, activity, vat };
 }
 
-function fillExtractedForm({ date, desc, amount, type, activity }) {
+function fillExtractedForm({ date, desc, amount, type, activity, vat }) {
   document.getElementById('extDate').value = date || new Date().toISOString().slice(0,10);
   document.getElementById('extDesc').value = desc || '';
   document.getElementById('extActivity').value = activity || 'Operating';
   document.getElementById('extType').value = type || 'outflow';
   document.getElementById('extAmount').value = amount || '';
-  if (amount) document.getElementById('extAmount').classList.add('highlight');
+  const amtEl = document.getElementById('extAmount');
+  amtEl.classList.toggle('highlight', !!amount);
+  // Show VAT info line if detected
+  const vatInfo = document.getElementById('vatInfo');
+  if (vat > 0) {
+    vatInfo.textContent = `ภพ. / VAT detected: ฿${vat.toFixed(2)} (included in total)`;
+    vatInfo.style.display = 'block';
+  } else {
+    vatInfo.style.display = 'none';
+  }
   document.getElementById('extractedForm').style.display = 'block';
 }
 
