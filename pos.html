@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Food Shop POS</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --accent: #f97316;
+      --accent2: #fb923c;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --green: #22c55e;
+      --red: #ef4444;
+      --border: #334155;
+    }
+    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+    header .date { font-size: 0.85rem; color: var(--muted); }
+
+    .layout { display: grid; grid-template-columns: 1fr 360px; height: calc(100vh - 56px); }
+
+    /* ── LEFT: Menu ── */
+    .menu-panel { display: flex; flex-direction: column; overflow: hidden; }
+    .menu-top { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .search-box {
+      flex: 1; min-width: 160px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.45rem 0.75rem; border-radius: 8px; font-size: 0.9rem;
+    }
+    .search-box::placeholder { color: var(--muted); }
+    .cat-btn {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+      padding: 0.4rem 0.9rem; border-radius: 20px; cursor: pointer; font-size: 0.8rem; transition: all .15s;
+    }
+    .cat-btn.active, .cat-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .menu-grid { flex: 1; overflow-y: auto; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; align-content: start; }
+    .menu-grid::-webkit-scrollbar { width: 4px; } .menu-grid::-webkit-scrollbar-thumb { background: var(--surface2); }
+
+    .item-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.85rem; cursor: pointer; transition: all .15s; user-select: none;
+    }
+    .item-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .item-card .emoji { font-size: 2rem; margin-bottom: 0.4rem; }
+    .item-card .name { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.2rem; }
+    .item-card .price { font-size: 0.95rem; color: var(--accent); font-weight: 700; }
+    .item-card .cat-tag { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+
+    /* ── RIGHT: Cart / Order ── */
+    .cart-panel { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+    .cart-header { padding: 1rem; border-bottom: 1px solid var(--border); }
+    .cart-header h2 { font-size: 1rem; font-weight: 700; }
+    .cart-header .order-id { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    .cart-items { flex: 1; overflow-y: auto; padding: 0.75rem; }
+    .cart-items::-webkit-scrollbar { width: 4px; } .cart-items::-webkit-scrollbar-thumb { background: var(--surface2); }
+
+    .cart-empty { color: var(--muted); text-align: center; margin-top: 2rem; font-size: 0.9rem; }
+
+    .cart-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface2); border-radius: 8px; padding: 0.5rem 0.6rem; margin-bottom: 0.5rem;
+    }
+    .cart-row .cr-name { flex: 1; font-size: 0.85rem; font-weight: 500; }
+    .cart-row .cr-price { font-size: 0.8rem; color: var(--accent); white-space: nowrap; }
+    .qty-ctrl { display: flex; align-items: center; gap: 4px; }
+    .qty-btn {
+      width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+      background: var(--border); color: var(--text); font-size: 1rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center; transition: background .1s;
+    }
+    .qty-btn:hover { background: var(--accent); }
+    .qty-val { font-size: 0.85rem; font-weight: 700; min-width: 18px; text-align: center; }
+    .remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 1rem; padding: 2px; }
+
+    .cart-footer { padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+    .totals { margin-bottom: 0.75rem; }
+    .total-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.3rem; color: var(--muted); }
+    .total-row.grand { font-size: 1rem; font-weight: 700; color: var(--text); }
+
+    .payment-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .pay-btn {
+      flex: 1; padding: 0.4rem; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text); cursor: pointer; font-size: 0.8rem; transition: all .15s;
+    }
+    .pay-btn.active { background: var(--accent); border-color: var(--accent); font-weight: 700; }
+
+    .cash-input-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .cash-input-row label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .cash-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.4rem 0.6rem; border-radius: 8px; font-size: 0.9rem;
+    }
+    .change-display { font-size: 0.85rem; color: var(--green); font-weight: 600; }
+
+    .btn-charge {
+      width: 100%; padding: 0.75rem; border-radius: 10px; border: none;
+      background: var(--accent); color: #fff; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-charge:hover { background: var(--accent2); }
+    .btn-charge:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+    .btn-clear { width: 100%; padding: 0.45rem; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 0.8rem; cursor: pointer; margin-top: 0.4rem; }
+    .btn-clear:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── Receipt modal ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-overlay.hidden { display: none; }
+    .receipt {
+      background: #fff; color: #111; width: 320px; border-radius: 12px; padding: 1.5rem;
+      font-family: 'Courier New', monospace; font-size: 0.85rem;
+    }
+    .receipt h3 { text-align: center; font-size: 1.1rem; margin-bottom: 0.25rem; }
+    .receipt .r-sub { text-align: center; color: #666; font-size: 0.75rem; margin-bottom: 1rem; }
+    .receipt hr { border: none; border-top: 1px dashed #ccc; margin: 0.5rem 0; }
+    .receipt .r-row { display: flex; justify-content: space-between; margin: 0.2rem 0; }
+    .receipt .r-total { font-weight: 700; font-size: 1rem; }
+    .receipt .r-thank { text-align: center; margin-top: 0.75rem; font-size: 0.8rem; color: #666; }
+    .receipt-btns { display: flex; gap: 0.5rem; margin-top: 1rem; }
+    .receipt-btns button { flex: 1; padding: 0.5rem; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+    .btn-print { background: #1e293b; color: #fff; }
+    .btn-new { background: #f97316; color: #fff; }
+
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
+      .cart-panel { max-height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>🍜 Food Shop POS</h1>
+  <span class="date" id="headerDate"></span>
+</header>
+
+<div class="layout">
+  <!-- Menu -->
+  <div class="menu-panel">
+    <div class="menu-top">
+      <input class="search-box" type="text" placeholder="Search menu…" id="searchInput" oninput="renderMenu()">
+      <button class="cat-btn active" data-cat="All" onclick="setCategory(this)">All</button>
+      <button class="cat-btn" data-cat="Rice" onclick="setCategory(this)">Rice</button>
+      <button class="cat-btn" data-cat="Noodles" onclick="setCategory(this)">Noodles</button>
+      <button class="cat-btn" data-cat="Snacks" onclick="setCategory(this)">Snacks</button>
+      <button class="cat-btn" data-cat="Drinks" onclick="setCategory(this)">Drinks</button>
+      <button class="cat-btn" data-cat="Dessert" onclick="setCategory(this)">Dessert</button>
+    </div>
+    <div class="menu-grid" id="menuGrid"></div>
+  </div>
+
+  <!-- Cart -->
+  <div class="cart-panel">
+    <div class="cart-header">
+      <h2>Current Order</h2>
+      <div class="order-id" id="orderId"></div>
+    </div>
+    <div class="cart-items" id="cartItems"></div>
+    <div class="cart-footer">
+      <div class="totals">
+        <div class="total-row"><span>Subtotal</span><span id="subtotal">0 MMK</span></div>
+        <div class="total-row"><span>Tax (5%)</span><span id="tax">0 MMK</span></div>
+        <div class="total-row grand"><span>Total</span><span id="total">0 MMK</span></div>
+      </div>
+      <div class="payment-row">
+        <button class="pay-btn active" onclick="setPayment('Cash', this)">💵 Cash</button>
+        <button class="pay-btn" onclick="setPayment('Card', this)">💳 Card</button>
+        <button class="pay-btn" onclick="setPayment('KPay', this)">📱 KPay</button>
+      </div>
+      <div class="cash-input-row" id="cashRow">
+        <label>Cash:</label>
+        <input class="cash-input" type="number" id="cashReceived" placeholder="0" oninput="calcChange()">
+        <span class="change-display" id="changeDisplay"></span>
+      </div>
+      <button class="btn-charge" id="chargeBtn" onclick="charge()" disabled>Charge</button>
+      <button class="btn-clear" onclick="clearCart()">Clear Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal-overlay hidden" id="receiptModal">
+  <div class="receipt" id="receiptContent"></div>
+</div>
+
+<script>
+const MENU = [
+  { id:1, name:'Fried Rice',        price:2500,  emoji:'🍛', cat:'Rice' },
+  { id:2, name:'Chicken Rice',      price:3000,  emoji:'🍚', cat:'Rice' },
+  { id:3, name:'Mixed Fried Rice',  price:3500,  emoji:'🍳', cat:'Rice' },
+  { id:4, name:'Mohinga',           price:1500,  emoji:'🍜', cat:'Noodles' },
+  { id:5, name:'Shan Noodles',      price:2000,  emoji:'🍝', cat:'Noodles' },
+  { id:6, name:'Khauk Swè',         price:2500,  emoji:'🍲', cat:'Noodles' },
+  { id:7, name:'Spring Roll (3pc)', price:1000,  emoji:'🥟', cat:'Snacks' },
+  { id:8, name:'Samosa (2pc)',      price:800,   emoji:'🫔', cat:'Snacks' },
+  { id:9, name:'French Fries',      price:1500,  emoji:'🍟', cat:'Snacks' },
+  { id:10,name:'Water (500ml)',     price:300,   emoji:'💧', cat:'Drinks' },
+  { id:11,name:'Soft Drink',        price:700,   emoji:'🥤', cat:'Drinks' },
+  { id:12,name:'Green Tea',         price:500,   emoji:'🍵', cat:'Drinks' },
+  { id:13,name:'Fresh Juice',       price:1200,  emoji:'🧃', cat:'Drinks' },
+  { id:14,name:'Ice Cream',         price:1000,  emoji:'🍦', cat:'Dessert' },
+  { id:15,name:'Sticky Rice Cake',  price:700,   emoji:'🍡', cat:'Dessert' },
+];
+
+let cart = [];
+let payMethod = 'Cash';
+let currentCategory = 'All';
+let orderCount = 1;
+
+function fmt(n) { return n.toLocaleString() + ' MMK'; }
+
+function genOrderId() {
+  const now = new Date();
+  return `ORD-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(orderCount).padStart(4,'0')}`;
+}
+
+function setCategory(btn) {
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentCategory = btn.dataset.cat;
+  renderMenu();
+}
+
+function renderMenu() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = MENU.filter(item =>
+    (currentCategory === 'All' || item.cat === currentCategory) &&
+    (item.name.toLowerCase().includes(q))
+  );
+  const grid = document.getElementById('menuGrid');
+  grid.innerHTML = filtered.map(item => `
+    <div class="item-card" onclick="addToCart(${item.id})">
+      <div class="emoji">${item.emoji}</div>
+      <div class="name">${item.name}</div>
+      <div class="price">${fmt(item.price)}</div>
+      <div class="cat-tag">${item.cat}</div>
+    </div>
+  `).join('');
+}
+
+function addToCart(id) {
+  const item = MENU.find(m => m.id === id);
+  const row = cart.find(r => r.id === id);
+  if (row) row.qty++;
+  else cart.push({ ...item, qty: 1 });
+  renderCart();
+}
+
+function changeQty(id, delta) {
+  const row = cart.find(r => r.id === id);
+  if (!row) return;
+  row.qty += delta;
+  if (row.qty <= 0) cart = cart.filter(r => r.id !== id);
+  renderCart();
+}
+
+function removeRow(id) { cart = cart.filter(r => r.id !== id); renderCart(); }
+
+function clearCart() {
+  cart = [];
+  document.getElementById('cashReceived').value = '';
+  document.getElementById('changeDisplay').textContent = '';
+  renderCart();
+}
+
+function renderCart() {
+  const el = document.getElementById('cartItems');
+  if (!cart.length) {
+    el.innerHTML = '<div class="cart-empty">No items yet.<br>Tap a menu item to add.</div>';
+  } else {
+    el.innerHTML = cart.map(r => `
+      <div class="cart-row">
+        <span class="cr-name">${r.emoji} ${r.name}</span>
+        <div class="qty-ctrl">
+          <button class="qty-btn" onclick="changeQty(${r.id},-1)">−</button>
+          <span class="qty-val">${r.qty}</span>
+          <button class="qty-btn" onclick="changeQty(${r.id},1)">+</button>
+        </div>
+        <span class="cr-price">${fmt(r.price * r.qty)}</span>
+        <button class="remove-btn" onclick="removeRow(${r.id})" title="Remove">✕</button>
+      </div>
+    `).join('');
+  }
+  updateTotals();
+}
+
+function updateTotals() {
+  const sub = cart.reduce((s, r) => s + r.price * r.qty, 0);
+  const tax = Math.round(sub * 0.05);
+  const total = sub + tax;
+  document.getElementById('subtotal').textContent = fmt(sub);
+  document.getElementById('tax').textContent = fmt(tax);
+  document.getElementById('total').textContent = fmt(total);
+  document.getElementById('chargeBtn').disabled = cart.length === 0;
+  calcChange();
+}
+
+function setPayment(method, btn) {
+  payMethod = method;
+  document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('cashRow').style.display = method === 'Cash' ? 'flex' : 'none';
+}
+
+function calcChange() {
+  if (payMethod !== 'Cash') return;
+  const sub = cart.reduce((s, r) => s + r.price * r.qty, 0);
+  const total = sub + Math.round(sub * 0.05);
+  const cash = parseFloat(document.getElementById('cashReceived').value) || 0;
+  const change = cash - total;
+  const el = document.getElementById('changeDisplay');
+  if (cash > 0) {
+    el.textContent = change >= 0 ? `Change: ${fmt(change)}` : `Short: ${fmt(-change)}`;
+    el.style.color = change >= 0 ? 'var(--green)' : 'var(--red)';
+  } else {
+    el.textContent = '';
+  }
+}
+
+function charge() {
+  if (!cart.length) return;
+  const sub = cart.reduce((s, r) => s + r.price * r.qty, 0);
+  const tax = Math.round(sub * 0.05);
+  const total = sub + tax;
+  const cash = parseFloat(document.getElementById('cashReceived').value) || 0;
+  if (payMethod === 'Cash' && cash < total) {
+    alert('Cash received is less than total!'); return;
+  }
+  const change = payMethod === 'Cash' ? cash - total : 0;
+  const orderId = genOrderId();
+  orderCount++;
+
+  // Save to sales history in localStorage
+  const sales = JSON.parse(localStorage.getItem('pos_sales') || '[]');
+  sales.push({
+    id: orderId, date: new Date().toISOString(),
+    items: [...cart], subtotal: sub, tax, total,
+    payMethod, cash: payMethod === 'Cash' ? cash : total, change
+  });
+  localStorage.setItem('pos_sales', JSON.stringify(sales));
+
+  showReceipt(orderId, sub, tax, total, cash, change);
+}
+
+function showReceipt(orderId, sub, tax, total, cash, change) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+  const rows = cart.map(r =>
+    `<div class="r-row"><span>${r.emoji} ${r.name} x${r.qty}</span><span>${fmt(r.price * r.qty)}</span></div>`
+  ).join('');
+  const cashRow = payMethod === 'Cash' ? `
+    <div class="r-row"><span>Cash</span><span>${fmt(cash)}</span></div>
+    <div class="r-row"><span>Change</span><span>${fmt(change)}</span></div>` : '';
+
+  document.getElementById('receiptContent').innerHTML = `
+    <h3>🍜 Food Shop</h3>
+    <div class="r-sub">${dateStr}<br>${orderId}</div>
+    <hr>
+    ${rows}
+    <hr>
+    <div class="r-row"><span>Subtotal</span><span>${fmt(sub)}</span></div>
+    <div class="r-row"><span>Tax (5%)</span><span>${fmt(tax)}</span></div>
+    <div class="r-row r-total"><span>TOTAL</span><span>${fmt(total)}</span></div>
+    <hr>
+    <div class="r-row"><span>Payment</span><span>${payMethod}</span></div>
+    ${cashRow}
+    <div class="r-thank">Thank you for your visit! 🙏</div>
+    <div class="receipt-btns">
+      <button class="btn-print" onclick="window.print()">🖨 Print</button>
+      <button class="btn-new" onclick="newOrder()">New Order</button>
+    </div>
+  `;
+  document.getElementById('receiptModal').classList.remove('hidden');
+}
+
+function newOrder() {
+  document.getElementById('receiptModal').classList.add('hidden');
+  clearCart();
+}
+
+// Init
+document.getElementById('headerDate').textContent = new Date().toLocaleDateString('en-US', {weekday:'short',year:'numeric',month:'short',day:'numeric'});
+document.getElementById('orderId').textContent = genOrderId();
+document.getElementById('cashRow').style.display = 'flex';
+renderMenu();
+renderCart();
+</script>
+</body>
+</html>
