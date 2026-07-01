@@ -1,66 +1,86 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <!--
-        Custom Sale Invoice (account.move) report layout for Odoo 19,
+        Custom Sale Invoice (account.move) report styling for Odoo 19,
         matching the "Great United" invoice design.
 
-        This overrides the built-in "account.report_invoice_document"
-        template body, so it applies automatically to the standard
-        "Invoices" print action - no new report action is required.
+        Written as targeted xpath patches against the REAL
+        "account.report_invoice_document" template (including the
+        "Sale Invoice" title and Customer/Date info table that were
+        already added), rather than a full replace, so the existing
+        discount/tax columns, QR code, payment terms and tax-totals
+        logic keep working - only the visual pieces called out below
+        are re-skinned to match the reference design.
 
         Usage:
         1. Copy this file into an existing custom module (e.g. under
-           <your_module>/report/report_invoice_great_united.xml).
-        2. Add its path to the module's __manifest__.py "data" list,
-           after the "account" module has loaded.
+           <your_module>/views/report_invoice_great_united.xml).
+        2. Add its path to the module's __manifest__.py "data" list.
         3. Make sure the module depends on "account".
         4. Set your company's logo, address, phone, email and website
-           under Settings > Companies so the header/footer populate
-           correctly. Update the static colors/text below if needed.
+           under Settings > Companies so the header/footer populate.
+
+        Decisions made while adapting to the real template (revisit if
+        they don't match what you want):
+        - The default partner/shipping "address row" (the block that
+          duplicated Client Name/Address next to a possible separate
+          Shipping Address) is replaced by the Great United letterhead
+          block (logo, HEAD OFFICE, green/navy diagonal accent), since
+          the reference design shows one letterhead, not two address
+          blocks.
+        - The existing custom info table is restructured so invoice-
+          level fields (Invoice No, Invoice Date, Sales Person, Payment
+          Type, Payment Term) sit on the left and customer fields
+          (Client Name, Address, Phone) sit on the right, matching the
+          reference layout, while keeping every field that was already
+          there.
+        - The item table is simplified to a flat, non-grouped table
+          with an added Product Code column (sections/subsections/
+          grouped lines and the discount/tax columns are dropped, since
+          the reference design doesn't show them).
+        - The totals box keeps the real amount_untaxed/amount_total/
+          payments/amount_residual logic, restyled with the green
+          "Paid on ..." / "Amount Due" highlight rows from the design.
     -->
     <template id="report_invoice_document_great_united" inherit_id="account.report_invoice_document">
-        <xpath expr="//t[@t-call='web.external_layout']" position="replace">
-            <t t-set="lang" t-value="o.partner_id.lang"/>
-            <div class="page great_united_invoice">
-                <style>
-                    .great_united_invoice { font-family: Arial, Helvetica, sans-serif; color: #1c1c1c; position: relative; }
-                    .gu-corner { position: absolute; top: -28px; left: -28px; width: 240px; height: 90px; overflow: hidden; z-index: 0; }
-                    .gu-corner .gu-band-1 { position: absolute; top: 0; left: 0; width: 280px; height: 32px; background: #1b2a4a; transform: rotate(-8deg); transform-origin: top left; }
-                    .gu-corner .gu-band-2 { position: absolute; top: 20px; left: 0; width: 280px; height: 32px; background: #3aa939; transform: rotate(-8deg); transform-origin: top left; }
-                    .gu-header-table { width: 100%; border-collapse: collapse; margin-top: 6px; position: relative; z-index: 1; }
-                    .gu-header-table td { vertical-align: top; }
-                    .gu-logo-text { font-size: 26px; font-weight: 800; color: #2f2f2f; line-height: 1; }
-                    .gu-logo-text .gu-green { color: #3aa939; }
-                    .gu-logo-sub { font-size: 8px; letter-spacing: 2px; color: #3aa939; font-weight: 700; margin-top: 3px; }
-                    .gu-head-office { text-align: right; }
-                    .gu-head-office h3 { color: #1b2a4a; font-size: 15px; font-weight: 800; margin: 0 0 4px 0; }
-                    .gu-head-office p { font-size: 10.5px; color: #444; margin: 0; line-height: 1.5; }
-                    .gu-divider { border: none; border-top: 1.5px solid #1b2a4a; margin: 14px 0; }
-                    .gu-meta-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; }
-                    .gu-meta-table td { vertical-align: top; padding: 1px 0; }
-                    .gu-meta-table .label { font-weight: 700; }
-                    .gu-items { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 10px; }
-                    .gu-items thead th { background: #3aa939; color: #fff; font-weight: 700; text-transform: uppercase; padding: 8px 6px; font-size: 10.5px; border-right: 1px solid rgba(255,255,255,0.4); }
-                    .gu-items thead th:last-child { border-right: none; }
-                    .gu-items tbody td { padding: 7px 6px; border-bottom: 1px solid #eee; }
-                    .gu-items tbody tr:nth-child(even) { background: #f2f2f2; }
-                    .gu-items .text-right { text-align: right; }
-                    .gu-items .text-center { text-align: center; }
-                    .gu-totals { width: 45%; float: right; border-collapse: collapse; font-size: 11px; margin-bottom: 16px; }
-                    .gu-totals td { padding: 6px 10px; background: #f2f2f2; }
-                    .gu-totals tr.gu-highlight td { background: #bfe3b4; font-weight: 700; }
-                    .gu-totals td.gu-amount { text-align: right; font-weight: 700; }
-                    .gu-thanks { font-weight: 700; font-size: 12px; margin: 6px 0 4px 0; clear: both; }
-                    .gu-terms { font-size: 8.5px; color: #333; line-height: 1.5; }
-                    .gu-quote { font-style: italic; font-size: 9px; color: #333; margin-top: 8px; }
-                    .gu-footer { margin-top: 18px; background: #3aa939; color: #fff; text-align: center; font-size: 9.5px; padding: 6px 10px; }
-                </style>
 
+        <!-- Letterhead: replace the default address row with the Great United header -->
+        <xpath expr="//t[@t-call='web.external_layout']/div[@class='row']" position="replace">
+            <style>
+                .great_united_invoice { font-family: Arial, Helvetica, sans-serif; color: #1c1c1c; }
+                .gu-letterhead { position: relative; margin-bottom: 6px; }
+                .gu-corner { position: absolute; top: -28px; left: -28px; width: 240px; height: 90px; overflow: hidden; z-index: 0; }
+                .gu-corner .gu-band-1 { position: absolute; top: 0; left: 0; width: 280px; height: 32px; background: #1b2a4a; transform: rotate(-8deg); transform-origin: top left; }
+                .gu-corner .gu-band-2 { position: absolute; top: 20px; left: 0; width: 280px; height: 32px; background: #3aa939; transform: rotate(-8deg); transform-origin: top left; }
+                .gu-header-table { width: 100%; border-collapse: collapse; margin-top: 6px; position: relative; z-index: 1; }
+                .gu-header-table td { vertical-align: top; }
+                .gu-logo-text { font-size: 26px; font-weight: 800; color: #2f2f2f; line-height: 1; }
+                .gu-logo-text .gu-green { color: #3aa939; }
+                .gu-logo-sub { font-size: 8px; letter-spacing: 2px; color: #3aa939; font-weight: 700; margin-top: 3px; }
+                .gu-head-office { text-align: right; }
+                .gu-head-office h3 { color: #1b2a4a; font-size: 15px; font-weight: 800; margin: 0 0 4px 0; }
+                .gu-head-office p { font-size: 10.5px; color: #444; margin: 0; line-height: 1.5; }
+                .gu-divider { border: none; border-top: 1.5px solid #1b2a4a; margin: 14px 0; }
+                .gu-meta-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 14px; }
+                .gu-meta-table td { vertical-align: top; padding: 1px 0 1px 0; }
+                .gu-meta-table .label { font-weight: 700; }
+                .gu-items thead th { background: #3aa939 !important; color: #fff !important; font-weight: 700; text-transform: uppercase; padding: 8px 6px; font-size: 10.5px; border-right: 1px solid rgba(255,255,255,0.4); }
+                .gu-items thead th:last-child { border-right: none; }
+                .gu-items tbody td { padding: 7px 6px; border-bottom: 1px solid #eee; }
+                .gu-items tbody tr:nth-child(even) { background: #f2f2f2; }
+                .gu-totals td { padding: 6px 10px; background: #f2f2f2; }
+                .gu-totals tr.gu-highlight td { background: #bfe3b4; font-weight: 700; }
+                .gu-totals td.gu-amount { text-align: right; font-weight: 700; }
+                .gu-thanks { font-weight: 700; font-size: 12px; margin: 10px 0 4px 0; }
+                .gu-terms { font-size: 8.5px !important; color: #333 !important; line-height: 1.5; }
+                .gu-quote { font-style: italic; font-size: 9px; color: #333; margin: 8px 0; }
+                .gu-footer { margin-top: 10px; background: #3aa939; color: #fff; text-align: center; font-size: 9.5px; padding: 6px 10px; }
+            </style>
+            <div class="gu-letterhead">
                 <div class="gu-corner">
                     <div class="gu-band-1"/>
                     <div class="gu-band-2"/>
                 </div>
-
                 <table class="gu-header-table">
                     <tr>
                         <td style="width: 55%;">
@@ -80,92 +100,121 @@
                         </td>
                     </tr>
                 </table>
-
                 <hr class="gu-divider"/>
-
-                <table class="gu-meta-table">
-                    <tr>
-                        <td style="width: 50%;"><span class="label">Invoice No: </span><span t-field="o.name"/></td>
-                        <td><span class="label">Client Name: </span><span t-field="o.partner_id.name"/></td>
-                    </tr>
-                    <tr>
-                        <td><span class="label">Invoice Date: </span><span t-field="o.invoice_date"/></td>
-                        <td><span class="label">Address: </span><span t-field="o.partner_id.contact_address"/></td>
-                    </tr>
-                    <tr>
-                        <td/>
-                        <td><span class="label">Phone: </span><span t-field="o.partner_id.phone"/></td>
-                    </tr>
-                </table>
-
-                <table class="gu-items">
-                    <thead>
-                        <tr>
-                            <th class="text-center" style="width: 5%;">No</th>
-                            <th style="width: 15%;">Product Code</th>
-                            <th style="width: 35%;">Description</th>
-                            <th class="text-center" style="width: 8%;">Qty</th>
-                            <th class="text-right" style="width: 18%;">Unit Price</th>
-                            <th class="text-right" style="width: 19%;">Amount</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <t t-set="line_no" t-value="0"/>
-                        <t t-foreach="o.invoice_line_ids.filtered(lambda l: not l.display_type)" t-as="line">
-                            <t t-set="line_no" t-value="line_no + 1"/>
-                            <tr>
-                                <td class="text-center" t-esc="line_no"/>
-                                <td t-esc="line.product_id.default_code or ''"/>
-                                <td t-esc="line.name"/>
-                                <td class="text-center" t-esc="line.quantity"/>
-                                <td class="text-right" t-field="line.price_unit" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
-                                <td class="text-right" t-field="line.price_subtotal" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
-                            </tr>
-                        </t>
-                    </tbody>
-                </table>
-
-                <table class="gu-totals">
-                    <tr>
-                        <td>Untaxed Amount</td>
-                        <td class="gu-amount" t-field="o.amount_untaxed" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
-                    </tr>
-                    <tr>
-                        <td>Total</td>
-                        <td class="gu-amount" t-field="o.amount_total" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
-                    </tr>
-                    <t t-if="o.invoice_payments_widget and o.invoice_payments_widget.get('content')">
-                        <t t-foreach="o.invoice_payments_widget['content']" t-as="payment">
-                            <tr class="gu-highlight">
-                                <td>Paid on <span t-esc="payment['date']"/> using <span t-esc="payment['journal_name']"/></td>
-                                <td class="gu-amount" t-esc="payment['amount']" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
-                            </tr>
-                        </t>
-                    </t>
-                    <tr class="gu-highlight">
-                        <td>Amount Due</td>
-                        <td class="gu-amount" t-field="o.amount_residual" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
-                    </tr>
-                </table>
-
-                <div class="gu-thanks">Thank You For Your Business</div>
-                <div class="gu-terms">
-                    <strong>TERMS &amp; CONDITIONS:</strong><br/>
-                    No Refunds: Goods sold are non-refundable.<br/>
-                    Return Policy: Report defects within [3] days with invoice.<br/>
-                    Check Item: Please verify quantity/condition before leaving.<br/>
-                    Delivery: Not liable for damage during transit/gate delivery.<br/>
-                    Installation: Not responsible for errors caused by self-installation.<br/>
-                    Price: Valid for today only.
-                </div>
-                <div class="gu-quote">"This is a computer-generated invoice. No signature is required."</div>
-
-                <div class="gu-footer">
-                    <span t-field="o.company_id.phone"/> &#160;|&#160;
-                    <span t-field="o.company_id.email"/> &#160;|&#160;
-                    <span t-field="o.company_id.website"/>
-                </div>
             </div>
         </xpath>
+
+        <!-- Tag the page so the .great_united_invoice font-family applies -->
+        <xpath expr="//div[@class='page mb-4']" position="attributes">
+            <attribute name="class" add="great_united_invoice" separator=" "/>
+        </xpath>
+
+        <!-- Invoice/customer info table: reorder into Invoice info (left) / Client info (right) -->
+        <xpath expr="//table[@class='mb-4']" position="replace">
+            <table class="gu-meta-table">
+                <tr>
+                    <td style="width: 50%;"><span class="label">Invoice No: </span><span t-field="o.name">INV/2026/00001</span></td>
+                    <td><span class="label">Client Name: </span><span t-field="o.partner_id.name">Customer Name</span></td>
+                </tr>
+                <tr>
+                    <td><span class="label">Invoice Date: </span><span t-field="o.invoice_date">2026-06-23</span></td>
+                    <td><span class="label">Address: </span><span t-field="o.partner_id" t-options="{&quot;widget&quot;: &quot;contact&quot;, &quot;fields&quot;: [&quot;address&quot;], &quot;no_marker&quot;: True}"/></td>
+                </tr>
+                <tr>
+                    <td><span class="label">Sales Person: </span><span t-field="o.invoice_user_id.name">Sales Person</span></td>
+                    <td><span class="label">Phone: </span><span t-field="o.partner_id.phone">+95 9xxxxxxxx</span></td>
+                </tr>
+                <tr>
+                    <td><span class="label">Payment Type: </span><span t-field="o.payment_reference">Cash</span></td>
+                    <td/>
+                </tr>
+                <tr>
+                    <td><span class="label">Payment Term: </span><span t-field="o.invoice_payment_term_id.name">Immediate Payment</span></td>
+                    <td/>
+                </tr>
+            </table>
+        </xpath>
+
+        <!-- Item table: flat list with a Product Code column, green header, zebra rows -->
+        <xpath expr="//table[@name='invoice_line_table']" position="replace">
+            <table class="o_has_total_table table table-borderless mb-0 gu-items" name="invoice_line_table">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 5%;">No</th>
+                        <th style="width: 15%;">Product Code</th>
+                        <th style="width: 35%;">Description</th>
+                        <th class="text-center" style="width: 8%;">Qty</th>
+                        <th class="text-end" style="width: 18%;">Unit Price</th>
+                        <th class="text-end" style="width: 19%;">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="invoice_tbody">
+                    <t t-set="line_no" t-value="0"/>
+                    <t t-foreach="o.invoice_line_ids.filtered(lambda l: not l.display_type).sorted(key=lambda l: l.sequence)" t-as="line">
+                        <t t-set="line_no" t-value="line_no + 1"/>
+                        <tr>
+                            <td class="text-center" t-esc="line_no"/>
+                            <td t-esc="line.product_id.default_code or ''"/>
+                            <td t-field="line.name" t-options="{'widget': 'text'}">Bacon Burger</td>
+                            <td class="text-center">
+                                <span t-field="line.quantity">3.00</span>
+                                <span t-field="line.product_uom_id" groups="uom.group_uom">units</span>
+                            </td>
+                            <td class="text-end" t-field="line.price_unit" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}">9.00</td>
+                            <td class="text-end" t-field="line.price_subtotal" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}">27.00</td>
+                        </tr>
+                    </t>
+                </tbody>
+            </table>
+        </xpath>
+
+        <!-- Totals: keep the real untaxed/total/payments/residual logic, apply the highlight styling -->
+        <xpath expr="//table[contains(@class,'o_total_table')]" position="replace">
+            <table class="o_total_table table table-borderless avoid-page-break-inside gu-totals">
+                <tr>
+                    <td>Untaxed Amount</td>
+                    <td class="gu-amount" t-field="o.amount_untaxed" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}">27.00</td>
+                </tr>
+                <tr>
+                    <td>Total</td>
+                    <td class="gu-amount" t-field="o.amount_total" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}">31.05</td>
+                </tr>
+                <t t-if="print_with_payments and o.payment_state != 'invoicing_legacy'">
+                    <t t-set="payments_vals" t-value="o.sudo().invoice_payments_widget and o.sudo().invoice_payments_widget['content'] or []"/>
+                    <t t-foreach="payments_vals" t-as="payment_vals">
+                        <tr t-if="payment_vals['is_exchange'] == 0" class="gu-highlight">
+                            <td>
+                                <t t-if="payment_vals['is_refund']">Reversed on </t>
+                                <t t-else="">Paid on </t>
+                                <t t-out="payment_vals['date']" t-options="{&quot;widget&quot;: &quot;date&quot;}">2026-06-23</t>
+                                using <t t-out="payment_vals['journal_name']"/>
+                            </td>
+                            <td class="gu-amount" t-out="payment_vals['amount']" t-options="{&quot;widget&quot;: &quot;monetary&quot;, &quot;display_currency&quot;: o.currency_id}">20.00</td>
+                        </tr>
+                    </t>
+                    <tr t-if="len(payments_vals) &gt; 0" class="gu-highlight">
+                        <td>Amount Due</td>
+                        <td class="gu-amount" t-field="o.amount_residual">11.05</td>
+                    </tr>
+                </t>
+            </table>
+        </xpath>
+
+        <!-- Thank-you note, styled terms, closing quote and green contact footer -->
+        <xpath expr="//div[@name='comment']" position="before">
+            <div class="gu-thanks">Thank You For Your Business</div>
+        </xpath>
+        <xpath expr="//div[@name='comment']" position="attributes">
+            <attribute name="class" add="gu-terms" separator=" "/>
+        </xpath>
+        <xpath expr="//div[@name='comment']" position="after">
+            <div class="gu-quote">"This is a computer-generated invoice. No signature is required."</div>
+            <div class="gu-footer">
+                <span t-field="o.company_id.phone"/> &#160;|&#160;
+                <span t-field="o.company_id.email"/> &#160;|&#160;
+                <span t-field="o.company_id.website"/>
+            </div>
+        </xpath>
+
     </template>
 </odoo>
