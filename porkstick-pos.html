@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="my">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ဝက်သားတုတ်ထိုးဆိုင် POS | Pork Stick Shop</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Padauk:wght@400;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #1a120b;
+      --surface: #2a1c11;
+      --surface2: #3c2817;
+      --accent: #ea580c;
+      --accent2: #f97316;
+      --text: #fdf3e7;
+      --muted: #c8ab8e;
+      --green: #22c55e;
+      --red: #ef4444;
+      --border: #4a3320;
+    }
+    body {
+      font-family: 'Padauk', 'Inter', 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem;
+    }
+    header .brand { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent2); }
+    header .tagline { font-size: 0.8rem; color: var(--muted); }
+    header .date { font-size: 0.85rem; color: var(--muted); }
+
+    .layout { display: grid; grid-template-columns: 1fr 360px; height: calc(100vh - 68px); }
+
+    /* ── LEFT: Menu ── */
+    .menu-panel { display: flex; flex-direction: column; overflow: hidden; }
+    .menu-top { padding: 1rem; border-bottom: 1px solid var(--border); display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .search-box {
+      flex: 1; min-width: 160px;
+      background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.45rem 0.75rem; border-radius: 8px; font-size: 0.9rem;
+      font-family: inherit;
+    }
+    .search-box::placeholder { color: var(--muted); }
+    .cat-btn {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+      padding: 0.4rem 0.9rem; border-radius: 20px; cursor: pointer; font-size: 0.8rem; transition: all .15s;
+      font-family: inherit;
+    }
+    .cat-btn.active, .cat-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .menu-grid { flex: 1; overflow-y: auto; padding: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; align-content: start; }
+    .menu-grid::-webkit-scrollbar { width: 4px; } .menu-grid::-webkit-scrollbar-thumb { background: var(--surface2); }
+
+    .item-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.85rem; cursor: pointer; transition: all .15s; user-select: none;
+    }
+    .item-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .item-card .emoji { font-size: 2rem; margin-bottom: 0.4rem; }
+    .item-card .name { font-size: 0.9rem; font-weight: 700; margin-bottom: 0.2rem; }
+    .item-card .price { font-size: 0.95rem; color: var(--accent2); font-weight: 700; }
+    .item-card .cat-tag { font-size: 0.7rem; color: var(--muted); margin-top: 0.2rem; }
+
+    /* ── RIGHT: Cart / Order ── */
+    .cart-panel { background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+    .cart-header { padding: 1rem; border-bottom: 1px solid var(--border); }
+    .cart-header h2 { font-size: 1rem; font-weight: 700; }
+    .cart-header .order-id { font-size: 0.75rem; color: var(--muted); margin-top: 2px; }
+
+    .cart-items { flex: 1; overflow-y: auto; padding: 0.75rem; }
+    .cart-items::-webkit-scrollbar { width: 4px; } .cart-items::-webkit-scrollbar-thumb { background: var(--surface2); }
+
+    .cart-empty { color: var(--muted); text-align: center; margin-top: 2rem; font-size: 0.9rem; }
+
+    .cart-row {
+      display: flex; align-items: center; gap: 0.5rem;
+      background: var(--surface2); border-radius: 8px; padding: 0.5rem 0.6rem; margin-bottom: 0.5rem;
+    }
+    .cart-row .cr-name { flex: 1; font-size: 0.85rem; font-weight: 600; }
+    .cart-row .cr-price { font-size: 0.8rem; color: var(--accent2); white-space: nowrap; }
+    .qty-ctrl { display: flex; align-items: center; gap: 4px; }
+    .qty-btn {
+      width: 22px; height: 22px; border-radius: 50%; border: none; cursor: pointer;
+      background: var(--border); color: var(--text); font-size: 1rem; line-height: 1;
+      display: flex; align-items: center; justify-content: center; transition: background .1s;
+    }
+    .qty-btn:hover { background: var(--accent); }
+    .qty-val { font-size: 0.85rem; font-weight: 700; min-width: 18px; text-align: center; }
+    .remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 1rem; padding: 2px; }
+
+    .cart-footer { padding: 0.75rem 1rem; border-top: 1px solid var(--border); }
+    .totals { margin-bottom: 0.75rem; }
+    .total-row { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.3rem; color: var(--muted); }
+    .total-row.grand { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+
+    .payment-row { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .pay-btn {
+      flex: 1; padding: 0.4rem; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface2); color: var(--text); cursor: pointer; font-size: 0.8rem; transition: all .15s;
+      font-family: inherit;
+    }
+    .pay-btn.active { background: var(--accent); border-color: var(--accent); font-weight: 700; }
+
+    .cash-input-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .cash-input-row label { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+    .cash-input {
+      flex: 1; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.4rem 0.6rem; border-radius: 8px; font-size: 0.9rem;
+      font-family: inherit;
+    }
+    .change-display { font-size: 0.85rem; color: var(--green); font-weight: 600; }
+
+    .btn-charge {
+      width: 100%; padding: 0.75rem; border-radius: 10px; border: none;
+      background: var(--accent); color: #fff; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: background .15s; font-family: inherit;
+    }
+    .btn-charge:hover { background: var(--accent2); }
+    .btn-charge:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+    .btn-clear { width: 100%; padding: 0.45rem; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 0.8rem; cursor: pointer; margin-top: 0.4rem; font-family: inherit; }
+    .btn-clear:hover { color: var(--red); border-color: var(--red); }
+
+    /* ── Receipt modal ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal-overlay.hidden { display: none; }
+    .receipt {
+      background: #fff; color: #111; width: 320px; border-radius: 12px; padding: 1.5rem;
+      font-family: 'Padauk', 'Courier New', monospace; font-size: 0.9rem;
+    }
+    .receipt h3 { text-align: center; font-size: 1.1rem; margin-bottom: 0.25rem; }
+    .receipt .r-sub { text-align: center; color: #666; font-size: 0.75rem; margin-bottom: 1rem; }
+    .receipt hr { border: none; border-top: 1px dashed #ccc; margin: 0.5rem 0; }
+    .receipt .r-row { display: flex; justify-content: space-between; margin: 0.2rem 0; gap: 0.5rem; }
+    .receipt .r-total { font-weight: 700; font-size: 1rem; }
+    .receipt .r-thank { text-align: center; margin-top: 0.75rem; font-size: 0.8rem; color: #666; }
+    .receipt-btns { display: flex; gap: 0.5rem; margin-top: 1rem; }
+    .receipt-btns button { flex: 1; padding: 0.5rem; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; font-family: inherit; }
+    .btn-print { background: #2a1c11; color: #fff; }
+    .btn-new { background: #ea580c; color: #fff; }
+
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; grid-template-rows: 1fr auto; height: auto; }
+      .cart-panel { max-height: 60vh; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>🐷 ဝက်သားတုတ်ထိုးဆိုင် POS</h1>
+    <span class="tagline">အရသာရှိတဲ့ မြန်မာအစားအစာလေးတွေနဲ့ ညစာကို အရသာရှိရှိ စားသုံးလိုက်ကြရအောင်။</span>
+  </div>
+  <span class="date" id="headerDate"></span>
+</header>
+
+<div class="layout">
+  <!-- Menu -->
+  <div class="menu-panel">
+    <div class="menu-top">
+      <input class="search-box" type="text" placeholder="မီနူးရှာဖွေရန်…" id="searchInput" oninput="renderMenu()">
+      <button class="cat-btn active" data-cat="All" onclick="setCategory(this)">အားလုံး</button>
+      <button class="cat-btn" data-cat="Grill" onclick="setCategory(this)">ကင်/ထိုး</button>
+      <button class="cat-btn" data-cat="Fried" onclick="setCategory(this)">ကြော်</button>
+      <button class="cat-btn" data-cat="Salad" onclick="setCategory(this)">သုပ်</button>
+      <button class="cat-btn" data-cat="SourSpicy" onclick="setCategory(this)">ချဉ်စပ်</button>
+      <button class="cat-btn" data-cat="Boiled" onclick="setCategory(this)">ပြုတ်</button>
+    </div>
+    <div class="menu-grid" id="menuGrid"></div>
+  </div>
+
+  <!-- Cart -->
+  <div class="cart-panel">
+    <div class="cart-header">
+      <h2>လက်ရှိအော်ဒါ</h2>
+      <div class="order-id" id="orderId"></div>
+    </div>
+    <div class="cart-items" id="cartItems"></div>
+    <div class="cart-footer">
+      <div class="totals">
+        <div class="total-row grand"><span>စုစုပေါင်း</span><span id="total">0 Ks</span></div>
+      </div>
+      <div class="payment-row">
+        <button class="pay-btn active" onclick="setPayment('Cash', this)">💵 ငွေသား</button>
+        <button class="pay-btn" onclick="setPayment('Card', this)">💳 ကတ်</button>
+        <button class="pay-btn" onclick="setPayment('KPay', this)">📱 KPay</button>
+      </div>
+      <div class="cash-input-row" id="cashRow">
+        <label>လက်ခံငွေ:</label>
+        <input class="cash-input" type="number" id="cashReceived" placeholder="0" oninput="calcChange()">
+        <span class="change-display" id="changeDisplay"></span>
+      </div>
+      <button class="btn-charge" id="chargeBtn" onclick="charge()" disabled>ငွေရှင်းရန်</button>
+      <button class="btn-clear" onclick="clearCart()">အော်ဒါဖျက်ရန်</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal-overlay hidden" id="receiptModal">
+  <div class="receipt" id="receiptContent"></div>
+</div>
+
+<script>
+const MENU = [
+  { id:1,  name:'ဝက်သားတုတ်ထိုး',      price:500,  emoji:'🐷', cat:'Grill' },
+  { id:2,  name:'ကြာဇံကြော်',          price:3000, emoji:'🍜', cat:'Fried' },
+  { id:3,  name:'ဝက်မွကြော် / သုပ်',    price:3500, emoji:'🥗', cat:'Fried' },
+  { id:4,  name:'အခေါက်ကင်',           price:4000, emoji:'🥓', cat:'Grill' },
+  { id:5,  name:'အူချိုကြော်',          price:3000, emoji:'🍳', cat:'Fried' },
+  { id:6,  name:'ငါးဖယ်အစာသွပ်',       price:4500, emoji:'🐟', cat:'Fried' },
+  { id:7,  name:'ပဲပြားအစာသွပ်',       price:3500, emoji:'🧈', cat:'Fried' },
+  { id:8,  name:'ရှောက်သီးသုပ်',        price:2000, emoji:'🍋', cat:'Salad' },
+  { id:9,  name:'နံရိုးကြော်',          price:4500, emoji:'🍖', cat:'Fried' },
+  { id:10, name:'နံရိုးချဉ်စပ်',        price:5000, emoji:'🌶️', cat:'SourSpicy' },
+  { id:11, name:'ဝက်လက်ချဉ်စပ်',       price:4500, emoji:'🍲', cat:'SourSpicy' },
+  { id:12, name:'ဝက်လက်စွပ်ပြုတ်',      price:4000, emoji:'🥣', cat:'Boiled' },
+  { id:13, name:'ကော်ပြန့်စိမ်း',       price:1500, emoji:'🥬', cat:'Salad' },
+];
+
+const CAT_LABEL = { Grill:'ကင်/ထိုး', Fried:'ကြော်', Salad:'သုပ်', SourSpicy:'ချဉ်စပ်', Boiled:'ပြုတ်' };
+
+let cart = [];
+let payMethod = 'Cash';
+let currentCategory = 'All';
+let orderCount = 1;
+
+function fmt(n) { return n.toLocaleString() + ' Ks'; }
+
+function genOrderId() {
+  const now = new Date();
+  return `PS-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(orderCount).padStart(4,'0')}`;
+}
+
+function setCategory(btn) {
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentCategory = btn.dataset.cat;
+  renderMenu();
+}
+
+function renderMenu() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = MENU.filter(item =>
+    (currentCategory === 'All' || item.cat === currentCategory) &&
+    (item.name.toLowerCase().includes(q))
+  );
+  const grid = document.getElementById('menuGrid');
+  grid.innerHTML = filtered.map(item => `
+    <div class="item-card" onclick="addToCart(${item.id})">
+      <div class="emoji">${item.emoji}</div>
+      <div class="name">${item.name}</div>
+      <div class="price">${fmt(item.price)}</div>
+      <div class="cat-tag">${CAT_LABEL[item.cat]}</div>
+    </div>
+  `).join('');
+}
+
+function addToCart(id) {
+  const item = MENU.find(m => m.id === id);
+  const row = cart.find(r => r.id === id);
+  if (row) row.qty++;
+  else cart.push({ ...item, qty: 1 });
+  renderCart();
+}
+
+function changeQty(id, delta) {
+  const row = cart.find(r => r.id === id);
+  if (!row) return;
+  row.qty += delta;
+  if (row.qty <= 0) cart = cart.filter(r => r.id !== id);
+  renderCart();
+}
+
+function removeRow(id) { cart = cart.filter(r => r.id !== id); renderCart(); }
+
+function clearCart() {
+  cart = [];
+  document.getElementById('cashReceived').value = '';
+  document.getElementById('changeDisplay').textContent = '';
+  renderCart();
+}
+
+function renderCart() {
+  const el = document.getElementById('cartItems');
+  if (!cart.length) {
+    el.innerHTML = '<div class="cart-empty">အော်ဒါမရှိသေးပါ။<br>မီနူးမှပစ္စည်းကိုနှိပ်ပါ။</div>';
+  } else {
+    el.innerHTML = cart.map(r => `
+      <div class="cart-row">
+        <span class="cr-name">${r.emoji} ${r.name}</span>
+        <div class="qty-ctrl">
+          <button class="qty-btn" onclick="changeQty(${r.id},-1)">−</button>
+          <span class="qty-val">${r.qty}</span>
+          <button class="qty-btn" onclick="changeQty(${r.id},1)">+</button>
+        </div>
+        <span class="cr-price">${fmt(r.price * r.qty)}</span>
+        <button class="remove-btn" onclick="removeRow(${r.id})" title="ဖျက်ရန်">✕</button>
+      </div>
+    `).join('');
+  }
+  updateTotals();
+}
+
+function updateTotals() {
+  const total = cart.reduce((s, r) => s + r.price * r.qty, 0);
+  document.getElementById('total').textContent = fmt(total);
+  document.getElementById('chargeBtn').disabled = cart.length === 0;
+  calcChange();
+}
+
+function setPayment(method, btn) {
+  payMethod = method;
+  document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('cashRow').style.display = method === 'Cash' ? 'flex' : 'none';
+}
+
+function calcChange() {
+  if (payMethod !== 'Cash') return;
+  const total = cart.reduce((s, r) => s + r.price * r.qty, 0);
+  const cash = parseFloat(document.getElementById('cashReceived').value) || 0;
+  const change = cash - total;
+  const el = document.getElementById('changeDisplay');
+  if (cash > 0) {
+    el.textContent = change >= 0 ? `အကြွေး: ${fmt(change)}` : `လိုငွေ: ${fmt(-change)}`;
+    el.style.color = change >= 0 ? 'var(--green)' : 'var(--red)';
+  } else {
+    el.textContent = '';
+  }
+}
+
+function charge() {
+  if (!cart.length) return;
+  const total = cart.reduce((s, r) => s + r.price * r.qty, 0);
+  const cash = parseFloat(document.getElementById('cashReceived').value) || 0;
+  if (payMethod === 'Cash' && cash < total) {
+    alert('လက်ခံငွေက စုစုပေါင်းထက် နည်းနေပါသည်!'); return;
+  }
+  const change = payMethod === 'Cash' ? cash - total : 0;
+  const orderId = genOrderId();
+  orderCount++;
+
+  const sales = JSON.parse(localStorage.getItem('porkstick_sales') || '[]');
+  sales.push({
+    id: orderId, date: new Date().toISOString(),
+    items: [...cart], total,
+    payMethod, cash: payMethod === 'Cash' ? cash : total, change
+  });
+  localStorage.setItem('porkstick_sales', JSON.stringify(sales));
+
+  showReceipt(orderId, total, cash, change);
+}
+
+function showReceipt(orderId, total, cash, change) {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+  const rows = cart.map(r =>
+    `<div class="r-row"><span>${r.emoji} ${r.name} x${r.qty}</span><span>${fmt(r.price * r.qty)}</span></div>`
+  ).join('');
+  const payLabel = { Cash: 'ငွေသား', Card: 'ကတ်', KPay: 'KPay' }[payMethod];
+  const cashRow = payMethod === 'Cash' ? `
+    <div class="r-row"><span>လက်ခံငွေ</span><span>${fmt(cash)}</span></div>
+    <div class="r-row"><span>အကြွေး</span><span>${fmt(change)}</span></div>` : '';
+
+  document.getElementById('receiptContent').innerHTML = `
+    <h3>🐷 ဝက်သားတုတ်ထိုးဆိုင်</h3>
+    <div class="r-sub">${dateStr}<br>${orderId}</div>
+    <hr>
+    ${rows}
+    <hr>
+    <div class="r-row r-total"><span>စုစုပေါင်း</span><span>${fmt(total)}</span></div>
+    <hr>
+    <div class="r-row"><span>ငွေပေးချေမှု</span><span>${payLabel}</span></div>
+    ${cashRow}
+    <div class="r-thank">ကျေးဇူးတင်ပါတယ်ရှင့်! 🙏</div>
+    <div class="receipt-btns">
+      <button class="btn-print" onclick="window.print()">🖨 ပရင့်ထုတ်ရန်</button>
+      <button class="btn-new" onclick="newOrder()">အော်ဒါအသစ်</button>
+    </div>
+  `;
+  document.getElementById('receiptModal').classList.remove('hidden');
+}
+
+function newOrder() {
+  document.getElementById('receiptModal').classList.add('hidden');
+  clearCart();
+}
+
+// Init
+document.getElementById('headerDate').textContent = new Date().toLocaleDateString('en-US', {weekday:'short',year:'numeric',month:'short',day:'numeric'});
+document.getElementById('orderId').textContent = genOrderId();
+document.getElementById('cashRow').style.display = 'flex';
+renderMenu();
+renderCart();
+</script>
+</body>
+</html>
