@@ -1,34 +1,46 @@
 /**
  * Shared client for the Odoo dashboard pages.
  *
- * All dashboards call the Cloudflare Worker proxy in odoo-proxy/ instead of
- * Odoo directly (the proxy holds the Odoo API key server-side — see
- * odoo-proxy/README.md for why and how to deploy it).
+ * Two connection modes, tried in this order:
+ *  1. Cloudflare Worker proxy (ODOO_PROXY_CONFIG below) — most secure, the
+ *     Odoo API key never reaches the browser. See odoo-proxy/README.md.
+ *  2. Direct-to-Odoo (assets/odoo-client.js) — no backend to deploy, but
+ *     needs CORS enabled on your Odoo server, and the API key is entered
+ *     once and kept only in this browser's localStorage. See "Enabling
+ *     CORS on Odoo" in the root README.
  *
- * Fill in baseUrl/token below once your proxy is deployed. Until then, every
- * dashboard shows a setup banner instead of trying (and failing) to fetch.
+ * If neither is configured, dashboards show a connect form instead of
+ * trying (and failing) to fetch.
  */
 const ODOO_PROXY_CONFIG = {
-  baseUrl: 'https://www.waihinmyanmarmart.com/', // e.g. 'https://odoo-dashboard-proxy.<your-subdomain>.workers.dev'
-  token: '4e82bd3a741003e1796b82925262071026a2d570',   // the PROXY_TOKEN secret you set on the Worker
+  baseUrl: '', // e.g. 'https://odoo-dashboard-proxy.<your-subdomain>.workers.dev'
+  token: '',   // the PROXY_TOKEN secret you set on the Worker
 };
 
 function odooProxyConfigured() {
   return Boolean(ODOO_PROXY_CONFIG.baseUrl && ODOO_PROXY_CONFIG.token);
 }
 
+function odooConfigured() {
+  return odooProxyConfigured() || Boolean(getDirectConfig());
+}
+
 async function fetchOdooReport(path, params = {}) {
-  if (!odooProxyConfigured()) {
-    throw new Error('SETUP_REQUIRED');
+  if (odooProxyConfigured()) {
+    const url = new URL(ODOO_PROXY_CONFIG.baseUrl.replace(/\/$/, '') + path);
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v); });
+    const res = await fetch(url.toString(), {
+      headers: { 'X-Proxy-Token': ODOO_PROXY_CONFIG.token },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
   }
-  const url = new URL(ODOO_PROXY_CONFIG.baseUrl.replace(/\/$/, '') + path);
-  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v); });
-  const res = await fetch(url.toString(), {
-    headers: { 'X-Proxy-Token': ODOO_PROXY_CONFIG.token },
-  });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
-  return body;
+  const directCfg = getDirectConfig();
+  if (directCfg) {
+    return fetchOdooReportDirect(path, params, directCfg);
+  }
+  throw new Error('SETUP_REQUIRED');
 }
 
 // ── Formatting ──────────────────────────────────────────────────────────
@@ -66,15 +78,46 @@ function renderSetupNote(containerId) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.style.display = 'block';
+  const cfg = getDirectConfig() || {};
   el.innerHTML = `
-    <strong>⚙️ Connect this dashboard to Odoo</strong><br><br>
-    This page pulls data through a small proxy so your Odoo API key never
-    ships to the browser. To wire it up:
-    <ol style="margin:0.5rem 0 0 1.25rem;padding:0">
-      <li>Deploy the Cloudflare Worker in <code>odoo-proxy/</code> (see its README).</li>
-      <li>Open <code>assets/odoo-dashboard.js</code> and set <code>ODOO_PROXY_CONFIG.baseUrl</code> and <code>.token</code>.</li>
-      <li>Reload this page.</li>
-    </ol>`;
+    <strong>⚙️ Connect this dashboard to Odoo</strong>
+    <p style="margin:0.5rem 0">
+      Enter your Odoo connection details below. They're saved only in
+      <em>this browser's</em> local storage — never written into the site's
+      source and never sent anywhere except your own Odoo server.
+    </p>
+    <div class="connect-form">
+      <input id="cfgUrl" placeholder="Odoo URL, e.g. https://your-odoo.example.com" value="${cfg.url || ''}">
+      <input id="cfgDb" placeholder="Database name" value="${cfg.db || ''}">
+      <input id="cfgUser" placeholder="Username / email" value="${cfg.username || ''}">
+      <input id="cfgKey" type="password" placeholder="API key" value="${cfg.apiKey || ''}">
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn-connect" onclick="saveDirectConfigFromForm()">Save &amp; Connect</button>
+        ${cfg.url ? `<button class="btn-disconnect" onclick="clearDirectConfig();location.reload()">Disconnect</button>` : ''}
+      </div>
+    </div>
+    <p style="margin-top:0.75rem;font-size:0.78rem">
+      This requires your Odoo server to allow cross-origin requests from
+      this site (CORS) — see "Enabling CORS on Odoo" in the repo's README.
+      If you can't change the Odoo server's config, deploy the
+      <a href="https://github.com/Pyaephyoips/Pyaephyoips.github.io/tree/main/odoo-proxy" target="_blank" rel="noreferrer">Cloudflare Worker proxy</a>
+      instead — it avoids the CORS requirement entirely.
+    </p>`;
+}
+
+function saveDirectConfigFromForm() {
+  const cfg = {
+    url: document.getElementById('cfgUrl').value.trim().replace(/\/$/, ''),
+    db: document.getElementById('cfgDb').value.trim(),
+    username: document.getElementById('cfgUser').value.trim(),
+    apiKey: document.getElementById('cfgKey').value.trim(),
+  };
+  if (!cfg.url || !cfg.db || !cfg.username || !cfg.apiKey) {
+    alert('Please fill in all fields.');
+    return;
+  }
+  saveDirectConfig(cfg);
+  location.reload();
 }
 
 // ── KPI row ──────────────────────────────────────────────────────────────

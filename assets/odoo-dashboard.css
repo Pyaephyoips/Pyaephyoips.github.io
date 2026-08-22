@@ -99,6 +99,24 @@ td.num, th.num { text-align: right; }
 }
 .setup-note code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; color: var(--blue); font-size: 0.8rem; }
 .setup-note a { color: var(--accent); }
+.setup-note strong { color: var(--text); font-size: 0.95rem; }
+
+.connect-form { display: flex; flex-direction: column; gap: 0.5rem; max-width: 380px; margin-top: 0.5rem; }
+.connect-form input {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 0.5rem 0.7rem; border-radius: 8px; font-size: 0.85rem;
+}
+.connect-form input::placeholder { color: var(--muted); }
+.btn-connect {
+  padding: 0.5rem 1.2rem; background: var(--accent); border: none; border-radius: 8px;
+  color: #fff; font-weight: 700; cursor: pointer; font-size: 0.85rem;
+}
+.btn-connect:hover { opacity: .85; }
+.btn-disconnect {
+  padding: 0.5rem 1rem; background: none; border: 1px solid var(--border); border-radius: 8px;
+  color: var(--muted); cursor: pointer; font-size: 0.85rem;
+}
+.btn-disconnect:hover { color: var(--red); border-color: var(--red); }
 
 .empty-state { text-align: center; color: var(--muted); padding: 1.5rem; font-size: 0.85rem; }
 
