@@ -86,6 +86,14 @@ async function readGroup(env, uid, model, domain, fields, groupby, opts = {}) {
   return executeKw(env, uid, model, 'read_group', [domain, fields, groupby], opts);
 }
 
+// Sort + cap read_group results client-side instead of passing `orderby` to
+// Odoo — some Odoo versions reject ordering read_group by an aggregated
+// measure ("Order term '<field> desc' is not a valid aggregate nor valid
+// groupby"), so this avoids relying on that syntax at all.
+function topN(groups, field, n = 10) {
+  return [...groups].sort((a, b) => (b[field] || 0) - (a[field] || 0)).slice(0, n);
+}
+
 async function searchRead(env, uid, model, domain, fields, opts = {}) {
   return executeKw(env, uid, model, 'search_read', [domain, fields], opts);
 }
@@ -119,13 +127,13 @@ async function buildSalesReport(env, uid, params) {
       ['amount_total'], ['date_order:month']),
     readGroup(env, uid, 'sale.order.line',
       [['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]],
-      ['price_subtotal', 'product_uom_qty'], ['product_id'], { orderby: 'price_subtotal desc', limit: 10 }),
+      ['price_subtotal', 'product_uom_qty'], ['product_id']),
     readGroup(env, uid, 'sale.order',
       [['state', 'in', soldStates], ['date_order', '>=', dateFrom]],
-      ['amount_total'], ['partner_id'], { orderby: 'amount_total desc', limit: 10 }),
+      ['amount_total'], ['partner_id']),
     readGroup(env, uid, 'sale.order',
       [['state', 'in', soldStates], ['date_order', '>=', dateFrom]],
-      ['amount_total'], ['user_id'], { orderby: 'amount_total desc', limit: 10 }),
+      ['amount_total'], ['user_id']),
     searchCount(env, uid, 'sale.order', [['state', 'in', ['draft', 'sent']]]),
   ]);
 
@@ -140,9 +148,9 @@ async function buildSalesReport(env, uid, params) {
       pending_quotations: pendingCount,
     },
     monthly_trend: monthly.map(r => ({ month: r['date_order:month'], total: r.amount_total, count: r.__count })),
-    top_products: byProduct.map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_uom_qty })),
-    top_customers: byCustomer.map(r => ({ customer: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
-    by_salesperson: bySalesperson.map(r => ({ salesperson: r.user_id ? r.user_id[1] : 'Unassigned', total: r.amount_total, count: r.__count })),
+    top_products: topN(byProduct, 'price_subtotal').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_uom_qty })),
+    top_customers: topN(byCustomer, 'amount_total').map(r => ({ customer: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
+    by_salesperson: topN(bySalesperson, 'amount_total').map(r => ({ salesperson: r.user_id ? r.user_id[1] : 'Unassigned', total: r.amount_total, count: r.__count })),
   };
 }
 
@@ -297,10 +305,10 @@ async function buildPurchaseReport(env, uid, params) {
       ['amount_total'], ['date_order:month']),
     readGroup(env, uid, 'purchase.order.line',
       [['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]],
-      ['price_subtotal', 'product_qty'], ['product_id'], { orderby: 'price_subtotal desc', limit: 10 }),
+      ['price_subtotal', 'product_qty'], ['product_id']),
     readGroup(env, uid, 'purchase.order',
       [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]],
-      ['amount_total'], ['partner_id'], { orderby: 'amount_total desc', limit: 10 }),
+      ['amount_total'], ['partner_id']),
     searchCount(env, uid, 'purchase.order', [['state', 'in', ['draft', 'sent', 'to approve']]]),
   ]);
 
@@ -315,8 +323,8 @@ async function buildPurchaseReport(env, uid, params) {
       pending_orders: pendingCount,
     },
     monthly_trend: monthly.map(r => ({ month: r['date_order:month'], total: r.amount_total, count: r.__count })),
-    top_products: byProduct.map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_qty })),
-    top_suppliers: bySupplier.map(r => ({ supplier: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
+    top_products: topN(byProduct, 'price_subtotal').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_qty })),
+    top_suppliers: topN(bySupplier, 'amount_total').map(r => ({ supplier: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
   };
 }
 
@@ -332,7 +340,7 @@ async function buildManufacturingReport(env, uid, params) {
       ['product_qty'], ['date_start:month']),
     readGroup(env, uid, 'mrp.production',
       [['state', '=', 'done'], ['date_start', '>=', dateFrom]],
-      ['product_qty', 'qty_produced'], ['product_id'], { orderby: 'qty_produced desc', limit: 10 }),
+      ['product_qty', 'qty_produced'], ['product_id']),
     searchCount(env, uid, 'mrp.production',
       [['date_planned_start', '<', today()], ['state', 'not in', ['done', 'cancel']]]),
   ]);
@@ -346,7 +354,7 @@ async function buildManufacturingReport(env, uid, params) {
     },
     by_state: byState.map(r => ({ state: r.state, count: r.__count })),
     monthly_trend: monthly.map(r => ({ month: r['date_start:month'], count: r.__count, qty: r.product_qty })),
-    top_products: byProduct.map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', qty_produced: r.qty_produced })),
+    top_products: topN(byProduct, 'qty_produced').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', qty_produced: r.qty_produced })),
   };
 }
 

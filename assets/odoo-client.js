@@ -96,6 +96,14 @@ async function directSearchCount(cfg, uid, model, domain) {
   return directExecuteKw(cfg, uid, model, 'search_count', [domain]);
 }
 
+// Sort + cap read_group results client-side instead of passing `orderby` to
+// Odoo — some Odoo versions reject ordering read_group by an aggregated
+// measure ("Order term '<field> desc' is not a valid aggregate nor valid
+// groupby"), so this avoids relying on that syntax at all.
+function directTopN(groups, field, n = 10) {
+  return [...groups].sort((a, b) => (b[field] || 0) - (a[field] || 0)).slice(0, n);
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────
 function directIsoDate(d) { return d.toISOString().slice(0, 10); }
 function directMonthsAgo(n) {
@@ -122,9 +130,9 @@ async function directBuildSalesReport(cfg, uid, params) {
   const [totals, monthly, byProduct, byCustomer, bySalesperson, pendingCount] = await Promise.all([
     directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], []),
     directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['date_order:month']),
-    directReadGroup(cfg, uid, 'sale.order.line', [['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]], ['price_subtotal', 'product_uom_qty'], ['product_id'], { orderby: 'price_subtotal desc', limit: 10 }),
-    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['partner_id'], { orderby: 'amount_total desc', limit: 10 }),
-    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['user_id'], { orderby: 'amount_total desc', limit: 10 }),
+    directReadGroup(cfg, uid, 'sale.order.line', [['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]], ['price_subtotal', 'product_uom_qty'], ['product_id']),
+    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['partner_id']),
+    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['user_id']),
     directSearchCount(cfg, uid, 'sale.order', [['state', 'in', ['draft', 'sent']]]),
   ]);
 
@@ -139,9 +147,9 @@ async function directBuildSalesReport(cfg, uid, params) {
       pending_quotations: pendingCount,
     },
     monthly_trend: monthly.map(r => ({ month: r['date_order:month'], total: r.amount_total, count: r.__count })),
-    top_products: byProduct.map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_uom_qty })),
-    top_customers: byCustomer.map(r => ({ customer: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
-    by_salesperson: bySalesperson.map(r => ({ salesperson: r.user_id ? r.user_id[1] : 'Unassigned', total: r.amount_total, count: r.__count })),
+    top_products: directTopN(byProduct, 'price_subtotal').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_uom_qty })),
+    top_customers: directTopN(byCustomer, 'amount_total').map(r => ({ customer: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
+    by_salesperson: directTopN(bySalesperson, 'amount_total').map(r => ({ salesperson: r.user_id ? r.user_id[1] : 'Unassigned', total: r.amount_total, count: r.__count })),
   };
 }
 
@@ -287,8 +295,8 @@ async function directBuildPurchaseReport(cfg, uid, params) {
   const [totals, monthly, byProduct, bySupplier, pendingCount] = await Promise.all([
     directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], []),
     directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['date_order:month']),
-    directReadGroup(cfg, uid, 'purchase.order.line', [['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]], ['price_subtotal', 'product_qty'], ['product_id'], { orderby: 'price_subtotal desc', limit: 10 }),
-    directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['partner_id'], { orderby: 'amount_total desc', limit: 10 }),
+    directReadGroup(cfg, uid, 'purchase.order.line', [['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]], ['price_subtotal', 'product_qty'], ['product_id']),
+    directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['partner_id']),
     directSearchCount(cfg, uid, 'purchase.order', [['state', 'in', ['draft', 'sent', 'to approve']]]),
   ]);
 
@@ -303,8 +311,8 @@ async function directBuildPurchaseReport(cfg, uid, params) {
       pending_orders: pendingCount,
     },
     monthly_trend: monthly.map(r => ({ month: r['date_order:month'], total: r.amount_total, count: r.__count })),
-    top_products: byProduct.map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_qty })),
-    top_suppliers: bySupplier.map(r => ({ supplier: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
+    top_products: directTopN(byProduct, 'price_subtotal').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_qty })),
+    top_suppliers: directTopN(bySupplier, 'amount_total').map(r => ({ supplier: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
   };
 }
 
@@ -315,7 +323,7 @@ async function directBuildManufacturingReport(cfg, uid, params) {
   const [byState, monthly, byProduct, delayedCount] = await Promise.all([
     directReadGroup(cfg, uid, 'mrp.production', [['date_start', '>=', dateFrom]], ['product_qty'], ['state']),
     directReadGroup(cfg, uid, 'mrp.production', [['date_start', '>=', dateFrom], ['state', '!=', 'cancel']], ['product_qty'], ['date_start:month']),
-    directReadGroup(cfg, uid, 'mrp.production', [['state', '=', 'done'], ['date_start', '>=', dateFrom]], ['product_qty', 'qty_produced'], ['product_id'], { orderby: 'qty_produced desc', limit: 10 }),
+    directReadGroup(cfg, uid, 'mrp.production', [['state', '=', 'done'], ['date_start', '>=', dateFrom]], ['product_qty', 'qty_produced'], ['product_id']),
     directSearchCount(cfg, uid, 'mrp.production', [['date_planned_start', '<', directToday()], ['state', 'not in', ['done', 'cancel']]]),
   ]);
 
@@ -328,7 +336,7 @@ async function directBuildManufacturingReport(cfg, uid, params) {
     },
     by_state: byState.map(r => ({ state: r.state, count: r.__count })),
     monthly_trend: monthly.map(r => ({ month: r['date_start:month'], count: r.__count, qty: r.product_qty })),
-    top_products: byProduct.map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', qty_produced: r.qty_produced })),
+    top_products: directTopN(byProduct, 'qty_produced').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', qty_produced: r.qty_produced })),
   };
 }
 
