@@ -59,6 +59,7 @@
   </div>
 </div>
 
+<script src="assets/odoo-client.js"></script>
 <script src="assets/odoo-dashboard.js"></script>
 <script>
 let months = 12;
@@ -71,7 +72,7 @@ function setPeriod(m, btn) {
 }
 
 async function load() {
-  if (!odooProxyConfigured()) {
+  if (!odooConfigured()) {
     renderSetupNote('setupNote');
     showState('stateBanner', null);
     return;

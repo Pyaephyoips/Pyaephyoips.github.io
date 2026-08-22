@@ -3,12 +3,18 @@
 This is a small [Cloudflare Worker](https://workers.cloudflare.com/) that sits
 between the static dashboards in this repo and your Odoo instance.
 
+**This is optional.** The dashboards can also connect straight to Odoo from
+the browser (see "Option A" in the root README) — no deployment needed, but
+it requires enabling CORS on your Odoo server and the API key lives in
+whoever's browser configures it. Use this Worker instead if you can't (or
+don't want to) change Odoo's CORS config, e.g. on Odoo Online SaaS.
+
 **Why a proxy at all?** GitHub Pages only serves static files — there's no
 server to keep secrets on. If the dashboards called Odoo directly from the
-browser with an API key baked into the page, that key (and the sales/P&L/
-inventory data behind it) would be visible to anyone who opens the page and
-views source. This Worker holds the Odoo API key as a server-side secret and
-only ever returns pre-aggregated report numbers (totals, top-10 lists,
+browser with an API key baked into the page source, that key (and the sales/
+P&L/inventory data behind it) would be visible to anyone who opens the page
+and views source. This Worker holds the Odoo API key as a server-side secret
+and only ever returns pre-aggregated report numbers (totals, top-10 lists,
 monthly trends) — never raw records or the key itself.
 
 **Important caveat:** this is still a *public* static site. The `PROXY_TOKEN`
