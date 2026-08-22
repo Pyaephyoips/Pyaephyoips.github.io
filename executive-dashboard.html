@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Executive Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>📌 Executive Dashboard</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="executive-dashboard.html" class="active">Executive</a>
+    <a href="sales-dashboard.html">Sales</a>
+    <a href="financial-dashboard.html">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html">Manufacturing</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)" id="asOfLabel"></span>
+    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div class="section-label">Executive Summary</div>
+  <div class="exec-hero" id="heroRow"></div>
+
+  <div class="section-label">Financial Ratios <span id="ratioBasisLabel" style="text-transform:none;font-weight:400;color:var(--muted)"></span></div>
+  <div class="ratio-row" id="ratioRow"></div>
+
+  <div class="section-label">Across the Business</div>
+  <div class="snapshot-grid" id="snapshotGrid"></div>
+
+  <p style="font-size:0.72rem;color:var(--muted)">
+    Ratios and margins are approximations for the period shown, derived from account-type
+    balances — see the note on the <a href="financial-dashboard.html" style="color:var(--accent)">B&amp;S / P&amp;L</a>
+    page. Verify against Odoo's own Accounting reports before using for filings.
+  </p>
+</div>
+
+<script src="assets/odoo-client.js"></script>
+<script src="assets/odoo-dashboard.js"></script>
+<script>
+function monthRange(monthsBack) {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
+  const to = monthsBack === 0 ? now : new Date(now.getFullYear(), now.getMonth() - monthsBack + 1, 0);
+  const iso = d => d.toISOString().slice(0, 10);
+  return { date_from: iso(from), date_to: iso(to) };
+}
+
+function pctDelta(curr, prev) {
+  if (!prev) return null;
+  return ((curr - prev) / Math.abs(prev)) * 100;
+}
+
+function renderDelta(pct) {
+  if (pct === null || !isFinite(pct)) return '';
+  const cls = pct >= 0 ? 'pos' : 'neg';
+  const arrow = pct >= 0 ? '▲' : '▼';
+  return `<div class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</div>`;
+}
+
+async function load() {
+  if (!odooConfigured()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading executive summary from Odoo…');
+  try {
+    const thisMonth = monthRange(0);
+    const lastMonth = monthRange(1);
+    const [finThis, finLast, sales, inventory, purchase, manufacturing] = await Promise.all([
+      fetchOdooReport('/api/financials', thisMonth),
+      fetchOdooReport('/api/financials', lastMonth),
+      fetchOdooReport('/api/sales', { months: 1 }),
+      fetchOdooReport('/api/inventory'),
+      fetchOdooReport('/api/purchase', { months: 1 }),
+      fetchOdooReport('/api/manufacturing', { months: 1 }),
+    ]);
+    showState('stateBanner', null);
+    render({ finThis, finLast, sales, inventory, purchase, manufacturing, thisMonth });
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(d) {
+  const pl = d.finThis.profit_and_loss;
+  const plLast = d.finLast.profit_and_loss;
+  const bs = d.finThis.balance_sheet;
+  const byType = bs.by_type || {};
+
+  document.getElementById('asOfLabel').textContent =
+    `As of ${d.finThis.period.date_to} — period: ${d.finThis.period.date_from} to ${d.finThis.period.date_to}`;
+
+  const cash = byType.asset_cash || 0;
+  const revenueDelta = pctDelta(pl.revenue, plLast.revenue);
+  const netProfitDelta = pctDelta(pl.net_profit, plLast.net_profit);
+  const netMargin = pl.revenue ? (pl.net_profit / pl.revenue) * 100 : 0;
+  const grossMargin = pl.revenue ? (pl.gross_profit / pl.revenue) * 100 : 0;
+
+  const currentAssets = (byType.asset_cash || 0) + (byType.asset_receivable || 0) + (byType.asset_current || 0);
+  const currentLiabilities = (byType.liability_payable || 0) + (byType.liability_current || 0);
+  const quickAssets = (byType.asset_cash || 0) + (byType.asset_receivable || 0);
+  const currentRatio = currentLiabilities ? currentAssets / currentLiabilities : null;
+  const quickRatio = currentLiabilities ? quickAssets / currentLiabilities : null;
+
+  const inventoryValue = d.inventory.kpis.total_inventory_value || 0;
+  const inventoryTurnover = inventoryValue ? (pl.cogs * 12) / inventoryValue : null; // annualized estimate
+  const daysInPeriod = Math.max(1, (new Date(d.thisMonth.date_to) - new Date(d.thisMonth.date_from)) / 86400000 + 1);
+  const receivableDays = pl.revenue ? ((byType.asset_receivable || 0) / pl.revenue) * daysInPeriod : null;
+
+  // ── Health rules, evaluated in priority order — first match wins ──
+  const checks = [
+    { test: pl.net_profit < 0, status: 'bad', label: 'AT RISK',
+      flag: `Net Profit Margin: ${netMargin.toFixed(1)}% — operating at a loss this period` },
+    { test: quickRatio !== null && quickRatio < 0.5, status: 'bad', label: 'AT RISK',
+      flag: `Quick Ratio ${quickRatio.toFixed(2)} — well below 1.0, limited liquid coverage of current liabilities` },
+    { test: quickRatio !== null && quickRatio < 1, status: 'warn', label: 'WARNING',
+      flag: `Quick Ratio ${quickRatio.toFixed(2)} — below 1.0, liquid assets don't fully cover current liabilities` },
+    { test: d.inventory.kpis.low_stock_items > 0, status: 'warn', label: 'WARNING',
+      flag: `${d.inventory.kpis.low_stock_items} inventory item(s) below reorder point` },
+    { test: d.manufacturing.kpis.delayed > 0, status: 'warn', label: 'WARNING',
+      flag: `${d.manufacturing.kpis.delayed} manufacturing order(s) delayed` },
+  ];
+  const hit = checks.find(c => c.test) || { status: 'good', label: 'HEALTHY',
+    flag: 'No critical issues detected across sales, inventory, purchase, or production' };
+
+  document.getElementById('heroRow').innerHTML = `
+    <div class="exec-tile">
+      <div class="label">💰 Cash Position</div>
+      <div class="value">${fmtCompact(cash)}</div>
+    </div>
+    <div class="exec-tile">
+      <div class="label">📈 Revenue</div>
+      <div class="value">${fmtCompact(pl.revenue)}</div>
+      ${renderDelta(revenueDelta)}
+    </div>
+    <div class="exec-tile">
+      <div class="label">💵 Net Profit</div>
+      <div class="value" style="color:${pl.net_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtCompact(pl.net_profit)}</div>
+      ${renderDelta(netProfitDelta)}
+    </div>
+    <div class="exec-tile">
+      <div class="label">🩺 Overall Health</div>
+      <span class="health-badge ${hit.status}">● ${hit.label}</span>
+    </div>
+    <div class="exec-tile flag">
+      <div class="label">⚠️ Top Flag</div>
+      <div class="flag-text ${hit.status}">${hit.flag}</div>
+    </div>
+  `;
+
+  const fmtRatio = v => v === null || !isFinite(v) ? '—' : v.toFixed(2);
+  const fmtPct = v => v === null || !isFinite(v) ? '—' : v.toFixed(1) + '%';
+  const fmtDays = v => v === null || !isFinite(v) ? '—' : v.toFixed(1) + 'd';
+  // Lower-is-worse ratios (current/quick ratio, margins): bad below badFloor, warn below warnFloor.
+  const ratioCls = (v, warnFloor, badFloor) => v === null || !isFinite(v) ? '' : (v < badFloor ? 'bad' : (v < warnFloor ? 'warn' : ''));
+  // Higher-is-worse metric (receivable days): bad above badCeil, warn above warnCeil.
+  const ceilCls = (v, warnCeil, badCeil) => v === null || !isFinite(v) ? '' : (v > badCeil ? 'bad' : (v > warnCeil ? 'warn' : ''));
+
+  document.getElementById('ratioBasisLabel').textContent = `(this period, annualized where noted)`;
+  document.getElementById('ratioRow').innerHTML = `
+    <div class="ratio-tile"><div class="rlabel">Current Ratio</div><div class="rvalue ${ratioCls(currentRatio, 1.5, 1)}">${fmtRatio(currentRatio)}</div></div>
+    <div class="ratio-tile"><div class="rlabel">Quick Ratio</div><div class="rvalue ${ratioCls(quickRatio, 1, 0.5)}">${fmtRatio(quickRatio)}</div></div>
+    <div class="ratio-tile"><div class="rlabel">Gross Margin</div><div class="rvalue ${ratioCls(grossMargin, 20, 0)}">${fmtPct(grossMargin)}</div></div>
+    <div class="ratio-tile"><div class="rlabel">Net Margin</div><div class="rvalue ${ratioCls(netMargin, 5, 0)}">${fmtPct(netMargin)}</div></div>
+    <div class="ratio-tile"><div class="rlabel">Inventory Turnover</div><div class="rvalue">${fmtRatio(inventoryTurnover)}x</div></div>
+    <div class="ratio-tile"><div class="rlabel">Receivable Days</div><div class="rvalue ${ceilCls(receivableDays, 45, 90)}">${fmtDays(receivableDays)}</div></div>
+  `;
+
+  const sk = d.sales.kpis, ik = d.inventory.kpis, pk = d.purchase.kpis, mk = d.manufacturing.kpis;
+  document.getElementById('snapshotGrid').innerHTML = `
+    <div class="snapshot-card">
+      <h3>📈 Sales</h3>
+      <div class="snapshot-stats">
+        <div class="srow"><span>Sales this month</span><b>${fmtCompact(sk.total_sales)}</b></div>
+        <div class="srow"><span>Orders</span><b>${fmtInt(sk.order_count)}</b></div>
+        <div class="srow"><span>Pending quotations</span><b>${fmtInt(sk.pending_quotations)}</b></div>
+      </div>
+      <a class="view-link" href="sales-dashboard.html">View Sales Dashboard →</a>
+    </div>
+    <div class="snapshot-card">
+      <h3>📦 Inventory</h3>
+      <div class="snapshot-stats">
+        <div class="srow"><span>Inventory value</span><b>${fmtCompact(ik.total_inventory_value)}</b></div>
+        <div class="srow"><span>Low stock items</span><b style="color:${ik.low_stock_items > 0 ? 'var(--accent)' : 'inherit'}">${fmtInt(ik.low_stock_items)}</b></div>
+        <div class="srow"><span>Moves in / out (30d)</span><b>${fmtInt(ik.moves_last_30d_in)} / ${fmtInt(ik.moves_last_30d_out)}</b></div>
+      </div>
+      <a class="view-link" href="inventory-dashboard.html">View Inventory Dashboard →</a>
+    </div>
+    <div class="snapshot-card">
+      <h3>🛒 Purchase</h3>
+      <div class="snapshot-stats">
+        <div class="srow"><span>Spend this month</span><b>${fmtCompact(pk.total_spend)}</b></div>
+        <div class="srow"><span>Orders</span><b>${fmtInt(pk.order_count)}</b></div>
+        <div class="srow"><span>Pending orders</span><b>${fmtInt(pk.pending_orders)}</b></div>
+      </div>
+      <a class="view-link" href="purchase-dashboard.html">View Purchase Dashboard →</a>
+    </div>
+    <div class="snapshot-card">
+      <h3>🏭 Manufacturing</h3>
+      <div class="snapshot-stats">
+        <div class="srow"><span>Orders this month</span><b>${fmtInt(mk.total_orders)}</b></div>
+        <div class="srow"><span>Done</span><b>${fmtInt(mk.done)}</b></div>
+        <div class="srow"><span>Delayed</span><b style="color:${mk.delayed > 0 ? 'var(--red)' : 'inherit'}">${fmtInt(mk.delayed)}</b></div>
+      </div>
+      <a class="view-link" href="manufacturing-dashboard.html">View Manufacturing Dashboard →</a>
+    </div>
+  `;
+}
+
+load();
+</script>
+</body>
+</html>
