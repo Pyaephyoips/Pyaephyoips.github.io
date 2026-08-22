@@ -221,37 +221,26 @@ async function buildFinancialsReport(env, uid, params) {
 async function buildInventoryReport(env, uid) {
   const internalDomain = [['location_id.usage', '=', 'internal']];
 
-  let byProduct;
-  let hasValueField = true;
-  try {
-    byProduct = await readGroup(env, uid, 'stock.quant', internalDomain, ['quantity', 'value'], ['product_id']);
-  } catch (e) {
-    hasValueField = false;
-    byProduct = await readGroup(env, uid, 'stock.quant', internalDomain, ['quantity'], ['product_id']);
-  }
+  // stock.quant.value is only populated under "Automated" inventory
+  // valuation — with the common "Manual" valuation method it silently
+  // returns 0 for every record (no error), which under-reports inventory
+  // value entirely. Compute value ourselves from quantity x standard_price
+  // instead, which works regardless of the valuation method configured.
+  const byProduct = await readGroup(env, uid, 'stock.quant', internalDomain, ['quantity'], ['product_id']);
 
   let totalValue = 0;
-  let enriched = byProduct;
-  if (!hasValueField && byProduct.length) {
-    const productIds = byProduct.map(r => r.product_id[0]);
-    const products = await executeKw(env, uid, 'product.product', 'read', [productIds, ['standard_price', 'categ_id']]);
-    const priceById = Object.fromEntries(products.map(p => [p.id, p.standard_price]));
-    const categById = Object.fromEntries(products.map(p => [p.id, p.categ_id ? p.categ_id[1] : 'Uncategorized']));
-    enriched = byProduct.map(r => {
-      const price = priceById[r.product_id[0]] || 0;
-      const value = r.quantity * price;
-      totalValue += value;
-      return { ...r, value, categ: categById[r.product_id[0]] };
-    });
-  } else {
-    totalValue = byProduct.reduce((s, r) => s + (r.value || 0), 0);
-    const productIds = byProduct.map(r => r.product_id[0]);
-    if (productIds.length) {
-      const products = await executeKw(env, uid, 'product.product', 'read', [productIds, ['categ_id']]);
-      const categById = Object.fromEntries(products.map(p => [p.id, p.categ_id ? p.categ_id[1] : 'Uncategorized']));
-      enriched = byProduct.map(r => ({ ...r, categ: categById[r.product_id[0]] }));
-    }
-  }
+  const productIds = byProduct.filter(r => r.product_id).map(r => r.product_id[0]);
+  const products = productIds.length
+    ? await executeKw(env, uid, 'product.product', 'read', [productIds, ['standard_price', 'categ_id']])
+    : [];
+  const priceById = Object.fromEntries(products.map(p => [p.id, p.standard_price]));
+  const categById = Object.fromEntries(products.map(p => [p.id, p.categ_id ? p.categ_id[1] : 'Uncategorized']));
+  const enriched = byProduct.filter(r => r.product_id).map(r => {
+    const price = priceById[r.product_id[0]] || 0;
+    const value = r.quantity * price;
+    totalValue += value;
+    return { ...r, value, categ: categById[r.product_id[0]] };
+  });
 
   const byCategory = {};
   for (const r of enriched) {
