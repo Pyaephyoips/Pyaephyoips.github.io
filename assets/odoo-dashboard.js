@@ -160,6 +160,26 @@ function renderTable(bodyId, rows, renderRow, colspan) {
   body.innerHTML = rows.map(renderRow).join('');
 }
 
+// ── Sparkline (compact stat-tile trend) ──────────────────────────────────
+function renderSparkline(svgId, values, opts = {}) {
+  const svg = document.getElementById(svgId);
+  if (!svg) return;
+  const W = svg.clientWidth || 100, H = 32;
+  if (!values || values.length < 2) { svg.innerHTML = ''; return; }
+  const minV = Math.min(...values), maxV = Math.max(...values);
+  const range = (maxV - minV) || 1;
+  const pad = 3;
+  const xStep = (W - pad * 2) / (values.length - 1);
+  const yScale = v => pad + (1 - (v - minV) / range) * (H - pad * 2);
+  const pts = values.map((v, i) => `${pad + i * xStep},${yScale(v)}`).join(' ');
+  const lastX = pad + (values.length - 1) * xStep, lastY = yScale(values[values.length - 1]);
+  const color = opts.color || '#38bdf8';
+  svg.innerHTML = `
+    <polyline points="${pts}" fill="none" stroke="#475569" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lastX}" cy="${lastY}" r="4" fill="${color}" stroke="#1e293b" stroke-width="2"/>
+  `;
+}
+
 // ── Line/area trend chart (SVG) ──────────────────────────────────────────
 function renderTrendChart(svgId, points, opts = {}) {
   const svg = document.getElementById(svgId);
