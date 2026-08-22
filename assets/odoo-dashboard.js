@@ -9,8 +9,8 @@
  * dashboard shows a setup banner instead of trying (and failing) to fetch.
  */
 const ODOO_PROXY_CONFIG = {
-  baseUrl: '', // e.g. 'https://odoo-dashboard-proxy.<your-subdomain>.workers.dev'
-  token: '',   // the PROXY_TOKEN secret you set on the Worker
+  baseUrl: 'https://www.waihinmyanmarmart.com/', // e.g. 'https://odoo-dashboard-proxy.<your-subdomain>.workers.dev'
+  token: '4e82bd3a741003e1796b82925262071026a2d570',   // the PROXY_TOKEN secret you set on the Worker
 };
 
 function odooProxyConfigured() {
