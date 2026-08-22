@@ -56,7 +56,18 @@ async function directJsonRpc(cfg, service, method, args) {
       `Odoo server for this site's origin — see "Enabling CORS on Odoo" in the README.`
     );
   }
-  const body = await res.json();
+  const rawText = await res.text();
+  let body;
+  try {
+    body = JSON.parse(rawText);
+  } catch (e) {
+    const snippet = rawText.replace(/\s+/g, ' ').trim().slice(0, 200);
+    throw new Error(
+      `Odoo returned a non-JSON response (HTTP ${res.status}) instead of a JSON-RPC result. ` +
+      `This usually means the request wasn't routed to Odoo's /jsonrpc endpoint (check the ` +
+      `nginx location block) or Odoo returned an error page. Response started with: "${snippet}"`
+    );
+  }
   if (body.error) {
     throw new Error(body.error.data?.message || body.error.message || 'Odoo RPC error');
   }
