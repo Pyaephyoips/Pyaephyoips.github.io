@@ -1,0 +1,10 @@
+name = "odoo-dashboard-proxy"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Non-secret vars can go here, e.g.:
+# [vars]
+# ALLOWED_ORIGIN = "https://pyaephyoips.github.io"
+#
+# Secrets (ODOO_URL, ODOO_DB, ODOO_USERNAME, ODOO_API_KEY, PROXY_TOKEN)
+# must NOT be committed here — set them with `wrangler secret put <NAME>`.

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manufacturing Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>🏭 Manufacturing Dashboard</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="sales-dashboard.html">Sales</a>
+    <a href="financial-dashboard.html">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html" class="active">Manufacturing</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)">Period:</span>
+    <button class="period-btn" data-m="3" onclick="setPeriod(3,this)">3 Months</button>
+    <button class="period-btn" data-m="6" onclick="setPeriod(6,this)">6 Months</button>
+    <button class="period-btn active" data-m="12" onclick="setPeriod(12,this)">12 Months</button>
+    <button class="period-btn" data-m="24" onclick="setPeriod(24,this)">24 Months</button>
+    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="chart-area">
+    <h3>Manufacturing Orders Trend</h3>
+    <svg class="trend" id="trendChart"></svg>
+  </div>
+
+  <div class="two-col">
+    <div class="section-card">
+      <div class="section-header"><h3>📋 Orders by State</h3></div>
+      <div id="byState"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header"><h3>🔧 Top Manufactured Products</h3></div>
+      <div id="topProducts"></div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/odoo-dashboard.js"></script>
+<script>
+let months = 12;
+
+const STATE_LABELS = {
+  draft: 'Draft', confirmed: 'Confirmed', progress: 'In Progress',
+  to_close: 'To Close', done: 'Done', cancel: 'Cancelled',
+};
+
+function setPeriod(m, btn) {
+  months = m;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  load();
+}
+
+async function load() {
+  if (!odooProxyConfigured()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading manufacturing data from Odoo…');
+  try {
+    const data = await fetchOdooReport('/api/manufacturing', { months });
+    showState('stateBanner', null);
+    render(data);
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(data) {
+  const k = data.kpis;
+  renderKpis('kpiRow', [
+    { label: 'Total Orders', value: fmtInt(k.total_orders) },
+    { label: 'Done', value: fmtInt(k.done), cls: 'pos' },
+    { label: 'In Progress', value: fmtInt(k.in_progress) },
+    { label: 'Delayed', value: fmtInt(k.delayed), cls: k.delayed > 0 ? 'neg' : '' },
+  ]);
+
+  renderTrendChart('trendChart', data.monthly_trend.map(r => ({ label: r.month.split(' ')[0].slice(0,3), value: r.count })), { color: '#38bdf8' });
+
+  renderRankBars('byState', data.by_state.map(s => ({ label: STATE_LABELS[s.state] || s.state, value: s.count })));
+  renderRankBars('topProducts', data.top_products.map(p => ({ label: p.product, value: p.qty_produced })));
+}
+
+load();
+</script>
+</body>
+</html>

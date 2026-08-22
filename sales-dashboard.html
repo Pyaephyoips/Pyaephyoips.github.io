@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sales Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>📈 Sales Dashboard</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="sales-dashboard.html" class="active">Sales</a>
+    <a href="financial-dashboard.html">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html">Manufacturing</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)">Period:</span>
+    <button class="period-btn" data-m="3" onclick="setPeriod(3,this)">3 Months</button>
+    <button class="period-btn" data-m="6" onclick="setPeriod(6,this)">6 Months</button>
+    <button class="period-btn active" data-m="12" onclick="setPeriod(12,this)">12 Months</button>
+    <button class="period-btn" data-m="24" onclick="setPeriod(24,this)">24 Months</button>
+    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="chart-area">
+    <h3>Sales Trend</h3>
+    <svg class="trend" id="trendChart"></svg>
+  </div>
+
+  <div class="two-col">
+    <div class="section-card">
+      <div class="section-header"><h3>🏆 Top Products</h3></div>
+      <div id="topProducts"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header"><h3>👤 Top Customers</h3></div>
+      <div id="topCustomers"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-header"><h3>🧑‍💼 Sales by Salesperson</h3></div>
+    <table>
+      <thead><tr><th>Salesperson</th><th class="num">Orders</th><th class="num">Total Sales</th></tr></thead>
+      <tbody id="salespersonBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="assets/odoo-dashboard.js"></script>
+<script>
+let months = 12;
+
+function setPeriod(m, btn) {
+  months = m;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  load();
+}
+
+async function load() {
+  if (!odooProxyConfigured()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading sales data from Odoo…');
+  try {
+    const data = await fetchOdooReport('/api/sales', { months });
+    showState('stateBanner', null);
+    render(data);
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(data) {
+  const k = data.kpis;
+  renderKpis('kpiRow', [
+    { label: 'Total Sales', value: fmtMoney(k.total_sales), cls: 'pos' },
+    { label: 'Orders', value: fmtInt(k.order_count) },
+    { label: 'Avg Order Value', value: fmtMoney(k.avg_order_value) },
+    { label: 'Pending Quotations', value: fmtInt(k.pending_quotations), cls: 'warn' },
+  ]);
+
+  renderTrendChart('trendChart', data.monthly_trend.map(r => ({ label: r.month.split(' ')[0].slice(0,3), value: r.total })));
+
+  renderRankBars('topProducts', data.top_products.map(p => ({ label: p.product, value: p.total })), { prefix: '' });
+  renderRankBars('topCustomers', data.top_customers.map(c => ({ label: c.customer, value: c.total })), { prefix: '' });
+
+  renderTable('salespersonBody', data.by_salesperson, r => `
+    <tr>
+      <td>${r.salesperson}</td>
+      <td class="num">${fmtInt(r.count)}</td>
+      <td class="num">${fmtMoney(r.total)}</td>
+    </tr>
+  `, 3);
+}
+
+load();
+</script>
+</body>
+</html>
