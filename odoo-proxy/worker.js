@@ -342,7 +342,7 @@ async function buildManufacturingReport(env, uid, params) {
       [['state', '=', 'done'], ['date_start', '>=', dateFrom]],
       ['product_qty', 'qty_produced'], ['product_id']),
     searchCount(env, uid, 'mrp.production',
-      [['date_planned_start', '<', today()], ['state', 'not in', ['done', 'cancel']]]),
+      [['date_start', '<', today()], ['state', 'not in', ['done', 'cancel']]]),
   ]);
 
   return {

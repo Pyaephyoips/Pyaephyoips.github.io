@@ -324,7 +324,7 @@ async function directBuildManufacturingReport(cfg, uid, params) {
     directReadGroup(cfg, uid, 'mrp.production', [['date_start', '>=', dateFrom]], ['product_qty'], ['state']),
     directReadGroup(cfg, uid, 'mrp.production', [['date_start', '>=', dateFrom], ['state', '!=', 'cancel']], ['product_qty'], ['date_start:month']),
     directReadGroup(cfg, uid, 'mrp.production', [['state', '=', 'done'], ['date_start', '>=', dateFrom]], ['product_qty', 'qty_produced'], ['product_id']),
-    directSearchCount(cfg, uid, 'mrp.production', [['date_planned_start', '<', directToday()], ['state', 'not in', ['done', 'cancel']]]),
+    directSearchCount(cfg, uid, 'mrp.production', [['date_start', '<', directToday()], ['state', 'not in', ['done', 'cancel']]]),
   ]);
 
   return {
