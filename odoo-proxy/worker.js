@@ -150,30 +150,41 @@ async function buildFinancialsReport(env, uid, params) {
   const dateFrom = params.get('date_from') || monthsAgo(11);
   const dateTo = params.get('date_to') || today();
 
-  const [plGroups, bsGroups] = await Promise.all([
+  // Group by account_id only (not the related account_type) — some Odoo
+  // versions reject filtering/grouping account.move.line by a dotted
+  // account_id.account_type path ("Property name ... has to be used on a
+  // property field"). account_type is read directly from account.account
+  // below instead, which is always a plain field access.
+  const [plByAccount, bsByAccount] = await Promise.all([
     readGroup(env, uid, 'account.move.line',
-      [['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo],
-       ['account_id.account_type', 'in', [...PL_INCOME_TYPES, ...PL_COGS_TYPES, ...PL_OPEX_TYPES]]],
-      ['balance'], ['account_id.account_type']),
+      [['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo]],
+      ['balance'], ['account_id']),
     readGroup(env, uid, 'account.move.line',
-      [['parent_state', '=', 'posted'], ['date', '<=', dateTo],
-       ['account_id.account_type', 'in', [...BS_ASSET_TYPES, ...BS_LIABILITY_TYPES, ...BS_EQUITY_TYPES]]],
-      ['balance'], ['account_id.account_type']),
+      [['parent_state', '=', 'posted'], ['date', '<=', dateTo]],
+      ['balance'], ['account_id']),
   ]);
 
+  const accountIds = [...new Set(
+    [...plByAccount, ...bsByAccount].filter(g => g.account_id).map(g => g.account_id[0])
+  )];
+  const accounts = accountIds.length
+    ? await executeKw(env, uid, 'account.account', 'read', [accountIds, ['account_type']])
+    : [];
+  const typeById = Object.fromEntries(accounts.map(a => [a.id, a.account_type]));
+
   const sumByTypes = (groups, types) => groups
-    .filter(g => types.includes(g['account_id.account_type']))
+    .filter(g => g.account_id && types.includes(typeById[g.account_id[0]]))
     .reduce((s, g) => s + (g.balance || 0), 0);
 
-  const revenue = -sumByTypes(plGroups, PL_INCOME_TYPES);
-  const cogs = sumByTypes(plGroups, PL_COGS_TYPES);
-  const opex = sumByTypes(plGroups, PL_OPEX_TYPES);
+  const revenue = -sumByTypes(plByAccount, PL_INCOME_TYPES);
+  const cogs = sumByTypes(plByAccount, PL_COGS_TYPES);
+  const opex = sumByTypes(plByAccount, PL_OPEX_TYPES);
   const grossProfit = revenue - cogs;
   const netProfit = grossProfit - opex;
 
-  const assets = sumByTypes(bsGroups, BS_ASSET_TYPES);
-  const liabilities = -sumByTypes(bsGroups, BS_LIABILITY_TYPES);
-  const equity = -sumByTypes(bsGroups, BS_EQUITY_TYPES);
+  const assets = sumByTypes(bsByAccount, BS_ASSET_TYPES);
+  const liabilities = -sumByTypes(bsByAccount, BS_LIABILITY_TYPES);
+  const equity = -sumByTypes(bsByAccount, BS_EQUITY_TYPES);
 
   return {
     period: { date_from: dateFrom, date_to: dateTo },
