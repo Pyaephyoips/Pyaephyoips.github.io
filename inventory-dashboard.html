@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventory Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>📦 Inventory Dashboard</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="sales-dashboard.html">Sales</a>
+    <a href="financial-dashboard.html">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html" class="active">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html">Manufacturing</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)">Live stock snapshot</span>
+    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="two-col">
+    <div class="section-card">
+      <div class="section-header"><h3>📊 Inventory Value by Category</h3></div>
+      <div id="byCategory"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header"><h3>💎 Top Products by Value</h3></div>
+      <div id="topByValue"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-header">
+      <h3>⚠️ Low Stock — Below Reorder Point</h3>
+      <span class="badge warn" id="lowStockBadge">0</span>
+    </div>
+    <table>
+      <thead><tr><th>Product</th><th class="num">Min Qty</th><th class="num">To Order</th></tr></thead>
+      <tbody id="lowStockBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="assets/odoo-dashboard.js"></script>
+<script>
+async function load() {
+  if (!odooProxyConfigured()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading inventory data from Odoo…');
+  try {
+    const data = await fetchOdooReport('/api/inventory');
+    showState('stateBanner', null);
+    render(data);
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(data) {
+  const k = data.kpis;
+  renderKpis('kpiRow', [
+    { label: 'Total Inventory Value', value: fmtMoney(k.total_inventory_value), cls: 'pos' },
+    { label: 'Products On Hand', value: fmtInt(k.distinct_products_on_hand) },
+    { label: 'Low Stock Items', value: fmtInt(k.low_stock_items), cls: k.low_stock_items > 0 ? 'warn' : '' },
+    { label: 'Moves In (30d)', value: fmtInt(k.moves_last_30d_in), cls: 'pos' },
+    { label: 'Moves Out (30d)', value: fmtInt(k.moves_last_30d_out), cls: 'neg' },
+  ]);
+
+  renderRankBars('byCategory', data.value_by_category.map(c => ({ label: c.category, value: c.value })));
+  renderRankBars('topByValue', data.top_by_value.map(p => ({ label: p.product, value: p.value })));
+
+  document.getElementById('lowStockBadge').textContent = data.low_stock.length;
+  renderTable('lowStockBody', data.low_stock, r => `
+    <tr>
+      <td>${r.product}</td>
+      <td class="num">${fmtInt(r.min_qty)}</td>
+      <td class="num" style="color:var(--accent);font-weight:700">${fmtInt(r.to_order)}</td>
+    </tr>
+  `, 3);
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Balance Sheet &amp; P&amp;L Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>📒 Balance Sheet &amp; P&amp;L</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="sales-dashboard.html">Sales</a>
+    <a href="financial-dashboard.html" class="active">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html">Manufacturing</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)">Period:</span>
+    <button class="period-btn" data-p="quarter" onclick="setPeriod('quarter',this)">This Quarter</button>
+    <button class="period-btn active" data-p="year" onclick="setPeriod('year',this)">This Year</button>
+    <button class="period-btn" data-p="12m" onclick="setPeriod('12m',this)">Last 12 Months</button>
+    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+  </div>
+
+  <div class="tab-btns">
+    <button class="tab-btn active" onclick="switchTab('pl',this)">Profit &amp; Loss</button>
+    <button class="tab-btn" onclick="switchTab('bs',this)">Balance Sheet</button>
+  </div>
+
+  <div class="tab-panel active" id="plPanel">
+    <div class="kpi-row" id="plKpiRow"></div>
+    <div class="section-card">
+      <div class="section-header"><h3>Revenue → Net Profit</h3></div>
+      <div id="plWaterfall" style="padding:0.75rem 0"></div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="bsPanel">
+    <div class="kpi-row" id="bsKpiRow"></div>
+    <div class="section-card">
+      <div class="section-header"><h3>Assets vs Liabilities &amp; Equity</h3></div>
+      <div id="bsBars" style="padding:0.75rem 0"></div>
+    </div>
+  </div>
+
+  <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="reportNote"></p>
+</div>
+
+<script src="assets/odoo-dashboard.js"></script>
+<script>
+let period = 'year';
+let lastData = null;
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('plPanel').classList.toggle('active', tab === 'pl');
+  document.getElementById('bsPanel').classList.toggle('active', tab === 'bs');
+}
+
+function setPeriod(p, btn) {
+  period = p;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  load();
+}
+
+function periodRange(p) {
+  const now = new Date();
+  const iso = d => d.toISOString().slice(0, 10);
+  if (p === 'quarter') {
+    const q = Math.floor(now.getMonth() / 3);
+    return { date_from: iso(new Date(now.getFullYear(), q * 3, 1)), date_to: iso(now) };
+  }
+  if (p === 'year') {
+    return { date_from: iso(new Date(now.getFullYear(), 0, 1)), date_to: iso(now) };
+  }
+  const d = new Date(now); d.setMonth(d.getMonth() - 11); d.setDate(1);
+  return { date_from: iso(d), date_to: iso(now) };
+}
+
+async function load() {
+  if (!odooProxyConfigured()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading financial data from Odoo…');
+  try {
+    const { date_from, date_to } = periodRange(period);
+    const data = await fetchOdooReport('/api/financials', { date_from, date_to });
+    showState('stateBanner', null);
+    lastData = data;
+    render(data);
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(data) {
+  const pl = data.profit_and_loss;
+  renderKpis('plKpiRow', [
+    { label: 'Revenue', value: fmtMoney(pl.revenue), cls: 'pos' },
+    { label: 'COGS', value: fmtMoney(pl.cogs), cls: 'neg' },
+    { label: 'Gross Profit', value: fmtMoney(pl.gross_profit), cls: pl.gross_profit >= 0 ? 'pos' : 'neg' },
+    { label: 'Operating Expenses', value: fmtMoney(pl.operating_expenses), cls: 'neg' },
+    { label: 'Net Profit', value: fmtMoney(pl.net_profit), cls: pl.net_profit >= 0 ? 'pos' : 'neg' },
+  ]);
+  renderRankBars('plWaterfall', [
+    { label: 'Revenue', value: pl.revenue },
+    { label: 'COGS', value: -pl.cogs },
+    { label: 'Gross Profit', value: pl.gross_profit },
+    { label: 'Operating Expenses', value: -pl.operating_expenses },
+    { label: 'Net Profit', value: pl.net_profit },
+  ], { colorFn: r => r.value >= 0 ? 'var(--green)' : 'var(--red)' });
+
+  const bs = data.balance_sheet;
+  renderKpis('bsKpiRow', [
+    { label: 'Assets', value: fmtMoney(bs.assets), cls: 'pos' },
+    { label: 'Liabilities', value: fmtMoney(bs.liabilities), cls: 'neg' },
+    { label: 'Equity (incl. period earnings)', value: fmtMoney(bs.equity) },
+    { label: 'Liabilities + Equity', value: fmtMoney(bs.liabilities_and_equity) },
+  ]);
+  renderRankBars('bsBars', [
+    { label: 'Assets', value: bs.assets },
+    { label: 'Liabilities', value: bs.liabilities },
+    { label: 'Equity', value: bs.equity },
+  ], { colorFn: r => r.label === 'Assets' ? 'var(--blue)' : (r.label === 'Liabilities' ? 'var(--red)' : 'var(--green)') });
+
+  document.getElementById('reportNote').textContent = data.note || '';
+}
+
+load();
+</script>
+</body>
+</html>
