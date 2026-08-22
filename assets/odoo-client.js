@@ -185,6 +185,16 @@ async function directBuildFinancialsReport(cfg, uid, params) {
   const liabilities = -sumByTypes(bsByAccount, DIRECT_BS_LIABILITY_TYPES);
   const equity = -sumByTypes(bsByAccount, DIRECT_BS_EQUITY_TYPES);
 
+  // Per-type breakdown (sign-normalized so every value is "positive = the
+  // natural balance sheet value") for ratio calculations (current ratio,
+  // quick ratio, receivable days) that need finer granularity than the
+  // combined assets/liabilities/equity totals above.
+  const byType = {};
+  for (const t of [...DIRECT_BS_ASSET_TYPES, ...DIRECT_BS_LIABILITY_TYPES, ...DIRECT_BS_EQUITY_TYPES]) {
+    const raw = sumByTypes(bsByAccount, [t]);
+    byType[t] = DIRECT_BS_ASSET_TYPES.includes(t) ? raw : -raw;
+  }
+
   return {
     period: { date_from: dateFrom, date_to: dateTo },
     profit_and_loss: { revenue, cogs, gross_profit: grossProfit, operating_expenses: opex, net_profit: netProfit },
@@ -192,6 +202,7 @@ async function directBuildFinancialsReport(cfg, uid, params) {
       as_of: dateTo, assets, liabilities,
       equity: equity + netProfit,
       liabilities_and_equity: liabilities + equity + netProfit,
+      by_type: byType,
     },
     note: 'Simplified approximation from account.move.line balances grouped by account type. ' +
           'Verify against Odoo Accounting > Reporting > Balance Sheet / Profit and Loss for audited figures.',

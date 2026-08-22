@@ -120,6 +120,47 @@ td.num, th.num { text-align: right; }
 
 .empty-state { text-align: center; color: var(--muted); padding: 1.5rem; font-size: 0.85rem; }
 
+/* ── Executive dashboard ── */
+.exec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.exec-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem; }
+.exec-tile .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
+.exec-tile .value { font-size: 1.6rem; font-weight: 700; }
+.exec-tile .subvalue { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
+.exec-tile .delta { font-size: 0.78rem; font-weight: 600; margin-top: 0.4rem; display: inline-flex; align-items: center; gap: 0.2rem; }
+.exec-tile .delta.pos { color: var(--green); }
+.exec-tile .delta.neg { color: var(--red); }
+.exec-tile.flag { grid-column: span 2; }
+@media (max-width: 700px) { .exec-tile.flag { grid-column: span 1; } }
+
+.health-badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.8rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+.health-badge.good { background: rgba(34,197,94,.15); color: var(--green); }
+.health-badge.warn { background: rgba(249,115,22,.15); color: var(--accent); }
+.health-badge.bad { background: rgba(239,68,68,.15); color: var(--red); }
+
+.flag-text { font-size: 0.85rem; margin-top: 0.6rem; line-height: 1.4; }
+.flag-text.bad { color: var(--red); }
+.flag-text.warn { color: var(--accent); }
+.flag-text.good { color: var(--muted); }
+
+.section-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 1.5rem 0 0.75rem; }
+.section-label:first-child { margin-top: 0; }
+
+.ratio-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.ratio-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem; text-align: center; }
+.ratio-tile .rlabel { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.35rem; }
+.ratio-tile .rvalue { font-size: 1.3rem; font-weight: 700; }
+.ratio-tile .rvalue.warn { color: var(--accent); }
+.ratio-tile .rvalue.bad { color: var(--red); }
+
+.snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.snapshot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.snapshot-card h3 { font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem; }
+.snapshot-stats { display: flex; flex-direction: column; gap: 0.35rem; }
+.snapshot-stats .srow { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--muted); }
+.snapshot-stats .srow b { color: var(--text); font-weight: 700; }
+.snapshot-card a.view-link { font-size: 0.78rem; color: var(--accent); text-decoration: none; margin-top: auto; padding-top: 0.3rem; }
+.snapshot-card a.view-link:hover { text-decoration: underline; }
+
 @media print {
   .dash-nav, .controls, .btn-refresh { display: none; }
   body { background: #fff; color: #111; }

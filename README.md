@@ -8,9 +8,9 @@ A static GitHub Pages site for Skybridge Business Solution.
 - `style.css` contains the complete responsive design.
 - `assets/skybridge-erp-hero.png` is the generated hero image.
 - `pos.html` / `cashflow.html` are local-only demo tools (browser storage, no backend).
-- `sales-dashboard.html`, `financial-dashboard.html`, `inventory-dashboard.html`,
-  `purchase-dashboard.html`, `manufacturing-dashboard.html` are Odoo-backed
-  ERP dashboards (see below).
+- `executive-dashboard.html`, `sales-dashboard.html`, `financial-dashboard.html`,
+  `inventory-dashboard.html`, `purchase-dashboard.html`, `manufacturing-dashboard.html`
+  are Odoo-backed ERP dashboards (see below).
 
 ## Customize
 
@@ -18,9 +18,11 @@ Update the contact information, client list, services, and wording directly in `
 
 ## Odoo dashboards
 
-Five dashboards pull live data from Odoo (Sales, Balance Sheet & P&L,
-Inventory, Purchase, Manufacturing). Because GitHub Pages is a static host,
-there are two ways to connect them to Odoo:
+Six dashboards pull live data from Odoo: an **Executive Dashboard**
+(cross-functional KPI summary, health status, financial ratios) plus five
+detail dashboards (Sales, Balance Sheet & P&L, Inventory, Purchase,
+Manufacturing). Because GitHub Pages is a static host, there are two ways
+to connect them to Odoo:
 
 ### Option A — Direct connection (no backend to deploy)
 
