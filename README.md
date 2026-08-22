@@ -24,6 +24,18 @@ detail dashboards (Sales, Balance Sheet & P&L, Inventory, Purchase,
 Manufacturing). Because GitHub Pages is a static host, there are two ways
 to connect them to Odoo:
 
+**Multi-company:** if your Odoo database has more than one company, each
+dashboard shows a company switcher next to its controls — pick a single
+company to filter every KPI/chart to it, or leave it on "All Companies
+(Consolidated)" for a combined view across everything the connected user
+can see. The selection is remembered per browser and applies across all
+six pages.
+
+**Date ranges:** Sales, Purchase, and Manufacturing offer month-count
+presets (3/6/12/24) plus a custom From/To date picker; Balance Sheet & P&L
+offers quarter/year/last-12-months presets plus the same custom picker.
+Picking a custom range overrides the preset until you pick a preset again.
+
 ### Option A — Direct connection (no backend to deploy)
 
 Open any dashboard page and use the **Connect to Odoo** form it shows —

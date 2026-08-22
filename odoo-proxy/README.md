@@ -81,13 +81,21 @@ pulling live data.
 All endpoints require the header `X-Proxy-Token: <PROXY_TOKEN>` (or a
 `?token=` query param) and return JSON.
 
-| Endpoint             | Query params           | Returns                                   |
-|----------------------|-------------------------|--------------------------------------------|
-| `/api/sales`         | `months` (default 12)   | Sales KPIs, monthly trend, top products/customers/salespeople |
-| `/api/financials`    | `date_from`, `date_to`  | Simplified P&L and Balance Sheet           |
-| `/api/inventory`     | —                        | Stock value, low-stock list, value by category, movement counts |
-| `/api/purchase`      | `months` (default 12)   | Purchase KPIs, monthly trend, top suppliers/products |
-| `/api/manufacturing` | `months` (default 12)   | MO counts by state, monthly trend, top produced items |
+| Endpoint             | Query params                                  | Returns                                   |
+|----------------------|------------------------------------------------|--------------------------------------------|
+| `/api/companies`     | —                                                | `res.company` list, for the company switcher |
+| `/api/sales`         | `months` (default 12) or `date_from`/`date_to`, `company_id`   | Sales KPIs, monthly trend, top products/customers/salespeople |
+| `/api/financials`    | `date_from`, `date_to`, `company_id`            | Simplified P&L and Balance Sheet           |
+| `/api/inventory`     | `company_id`                                    | Stock value, low-stock list, value by category, movement counts |
+| `/api/purchase`      | `months` (default 12) or `date_from`/`date_to`, `company_id`   | Purchase KPIs, monthly trend, top suppliers/products |
+| `/api/manufacturing` | `months` (default 12) or `date_from`/`date_to`, `company_id`   | MO counts by state, monthly trend, top produced items |
+
+`date_from`/`date_to` take priority over `months` when both are given.
+`company_id` filters every query to one `res.company` id; omit it (or leave
+it blank) for a consolidated view across every company the API user has
+access to. The dashboards manage both automatically — a company switcher
+appears whenever your Odoo database has more than one company, and a
+date-range picker sits next to the period presets on each report.
 
 ## Notes on the numbers
 

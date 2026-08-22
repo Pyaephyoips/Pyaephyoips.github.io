@@ -104,6 +104,19 @@ function directTopN(groups, field, n = 10) {
   return [...groups].sort((a, b) => (b[field] || 0) - (a[field] || 0)).slice(0, n);
 }
 
+// Every model used by these reports (sale/purchase orders + lines,
+// account.move.line, stock.quant/move/orderpoint, mrp.production) carries
+// its own direct company_id field, so a single leaf works everywhere —
+// no dotted/related paths needed.
+function directWithCompany(domain, companyId) {
+  return companyId ? [...domain, ['company_id', '=', companyId]] : domain;
+}
+
+function directGetCompanyId(params) {
+  const id = params.company_id ? parseInt(params.company_id, 10) : NaN;
+  return Number.isFinite(id) ? id : null;
+}
+
 // ── Date helpers ──────────────────────────────────────────────────────────
 function directIsoDate(d) { return d.toISOString().slice(0, 10); }
 function directMonthsAgo(n) {
@@ -114,6 +127,15 @@ function directMonthsAgo(n) {
 }
 function directToday() { return directIsoDate(new Date()); }
 
+// date_from/date_to win when given (custom range picker); otherwise fall
+// back to the months-count preset for backward compatibility.
+function directResolveRange(params) {
+  const dateTo = params.date_to || directToday();
+  const dateFrom = params.date_from
+    || directMonthsAgo(Math.min(parseInt(params.months || '12', 10), 36) - 1);
+  return { dateFrom, dateTo };
+}
+
 // ── Report builders (mirrors odoo-proxy/worker.js) ───────────────────────
 const DIRECT_PL_INCOME_TYPES = ['income', 'income_other'];
 const DIRECT_PL_COGS_TYPES = ['expense_direct_cost'];
@@ -122,24 +144,30 @@ const DIRECT_BS_ASSET_TYPES = ['asset_receivable', 'asset_cash', 'asset_current'
 const DIRECT_BS_LIABILITY_TYPES = ['liability_payable', 'liability_current', 'liability_non_current', 'liability_credit_card'];
 const DIRECT_BS_EQUITY_TYPES = ['equity', 'equity_unaffected'];
 
+async function directBuildCompaniesReport(cfg, uid) {
+  const companies = await directSearchRead(cfg, uid, 'res.company', [], ['id', 'name'], { order: 'name' });
+  return { companies };
+}
+
 async function directBuildSalesReport(cfg, uid, params) {
-  const months = Math.min(parseInt(params.months || '12', 10), 36);
-  const dateFrom = directMonthsAgo(months - 1);
+  const companyId = directGetCompanyId(params);
+  const { dateFrom, dateTo } = directResolveRange(params);
   const soldStates = ['sale', 'done'];
 
   const [totals, monthly, byProduct, byCustomer, bySalesperson, pendingCount] = await Promise.all([
-    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], []),
-    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['date_order:month']),
-    directReadGroup(cfg, uid, 'sale.order.line', [['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]], ['price_subtotal', 'product_uom_qty'], ['product_id']),
-    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['partner_id']),
-    directReadGroup(cfg, uid, 'sale.order', [['state', 'in', soldStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['user_id']),
-    directSearchCount(cfg, uid, 'sale.order', [['state', 'in', ['draft', 'sent']]]),
+    directReadGroup(cfg, uid, 'sale.order', directWithCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], []),
+    directReadGroup(cfg, uid, 'sale.order', directWithCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], ['date_order:month']),
+    directReadGroup(cfg, uid, 'sale.order.line', directWithCompany([['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['order_id.date_order', '<=', dateTo], ['display_type', '=', false]], companyId), ['price_subtotal', 'product_uom_qty'], ['product_id']),
+    directReadGroup(cfg, uid, 'sale.order', directWithCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], ['partner_id']),
+    directReadGroup(cfg, uid, 'sale.order', directWithCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], ['user_id']),
+    directSearchCount(cfg, uid, 'sale.order', directWithCompany([['state', 'in', ['draft', 'sent']]], companyId)),
   ]);
 
   const totalSales = totals[0]?.amount_total || 0;
   const orderCount = totals[0]?.__count || 0;
 
   return {
+    period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
       total_sales: totalSales,
       order_count: orderCount,
@@ -154,6 +182,7 @@ async function directBuildSalesReport(cfg, uid, params) {
 }
 
 async function directBuildFinancialsReport(cfg, uid, params) {
+  const companyId = directGetCompanyId(params);
   const dateFrom = params.date_from || directMonthsAgo(11);
   const dateTo = params.date_to || directToday();
 
@@ -164,10 +193,10 @@ async function directBuildFinancialsReport(cfg, uid, params) {
   // below instead, which is always a plain field access.
   const [plByAccount, bsByAccount] = await Promise.all([
     directReadGroup(cfg, uid, 'account.move.line',
-      [['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo]],
+      directWithCompany([['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo]], companyId),
       ['balance'], ['account_id']),
     directReadGroup(cfg, uid, 'account.move.line',
-      [['parent_state', '=', 'posted'], ['date', '<=', dateTo]],
+      directWithCompany([['parent_state', '=', 'posted'], ['date', '<=', dateTo]], companyId),
       ['balance'], ['account_id']),
   ]);
 
@@ -217,8 +246,9 @@ async function directBuildFinancialsReport(cfg, uid, params) {
   };
 }
 
-async function directBuildInventoryReport(cfg, uid) {
-  const internalDomain = [['location_id.usage', '=', 'internal']];
+async function directBuildInventoryReport(cfg, uid, params) {
+  const companyId = directGetCompanyId(params);
+  const internalDomain = directWithCompany([['location_id.usage', '=', 'internal']], companyId);
 
   // stock.quant.value is only populated under "Automated" inventory
   // valuation — with the common "Manual" valuation method it silently
@@ -253,9 +283,9 @@ async function directBuildInventoryReport(cfg, uid) {
     .map(r => ({ product: r.product_id[1], quantity: r.quantity, value: r.value || 0 }));
 
   const [lowStock, last30In, last30Out] = await Promise.all([
-    directSearchRead(cfg, uid, 'stock.warehouse.orderpoint', [['qty_to_order', '>', 0]], ['product_id', 'qty_to_order', 'product_min_qty'], { limit: 20 }),
-    directSearchCount(cfg, uid, 'stock.move', [['state', '=', 'done'], ['date', '>=', directMonthsAgo(1)], ['picking_type_id.code', '=', 'incoming']]),
-    directSearchCount(cfg, uid, 'stock.move', [['state', '=', 'done'], ['date', '>=', directMonthsAgo(1)], ['picking_type_id.code', '=', 'outgoing']]),
+    directSearchRead(cfg, uid, 'stock.warehouse.orderpoint', directWithCompany([['qty_to_order', '>', 0]], companyId), ['product_id', 'qty_to_order', 'product_min_qty'], { limit: 20 }),
+    directSearchCount(cfg, uid, 'stock.move', directWithCompany([['state', '=', 'done'], ['date', '>=', directMonthsAgo(1)], ['picking_type_id.code', '=', 'incoming']], companyId)),
+    directSearchCount(cfg, uid, 'stock.move', directWithCompany([['state', '=', 'done'], ['date', '>=', directMonthsAgo(1)], ['picking_type_id.code', '=', 'outgoing']], companyId)),
   ]);
 
   return {
@@ -277,22 +307,23 @@ async function directBuildInventoryReport(cfg, uid) {
 }
 
 async function directBuildPurchaseReport(cfg, uid, params) {
-  const months = Math.min(parseInt(params.months || '12', 10), 36);
-  const dateFrom = directMonthsAgo(months - 1);
+  const companyId = directGetCompanyId(params);
+  const { dateFrom, dateTo } = directResolveRange(params);
   const purchasedStates = ['purchase', 'done'];
 
   const [totals, monthly, byProduct, bySupplier, pendingCount] = await Promise.all([
-    directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], []),
-    directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['date_order:month']),
-    directReadGroup(cfg, uid, 'purchase.order.line', [['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]], ['price_subtotal', 'product_qty'], ['product_id']),
-    directReadGroup(cfg, uid, 'purchase.order', [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]], ['amount_total'], ['partner_id']),
-    directSearchCount(cfg, uid, 'purchase.order', [['state', 'in', ['draft', 'sent', 'to approve']]]),
+    directReadGroup(cfg, uid, 'purchase.order', directWithCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], []),
+    directReadGroup(cfg, uid, 'purchase.order', directWithCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], ['date_order:month']),
+    directReadGroup(cfg, uid, 'purchase.order.line', directWithCompany([['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['order_id.date_order', '<=', dateTo], ['display_type', '=', false]], companyId), ['price_subtotal', 'product_qty'], ['product_id']),
+    directReadGroup(cfg, uid, 'purchase.order', directWithCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId), ['amount_total'], ['partner_id']),
+    directSearchCount(cfg, uid, 'purchase.order', directWithCompany([['state', 'in', ['draft', 'sent', 'to approve']]], companyId)),
   ]);
 
   const totalSpend = totals[0]?.amount_total || 0;
   const orderCount = totals[0]?.__count || 0;
 
   return {
+    period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
       total_spend: totalSpend,
       order_count: orderCount,
@@ -306,17 +337,18 @@ async function directBuildPurchaseReport(cfg, uid, params) {
 }
 
 async function directBuildManufacturingReport(cfg, uid, params) {
-  const months = Math.min(parseInt(params.months || '12', 10), 36);
-  const dateFrom = directMonthsAgo(months - 1);
+  const companyId = directGetCompanyId(params);
+  const { dateFrom, dateTo } = directResolveRange(params);
 
   const [byState, monthly, byProduct, delayedCount] = await Promise.all([
-    directReadGroup(cfg, uid, 'mrp.production', [['date_start', '>=', dateFrom]], ['product_qty'], ['state']),
-    directReadGroup(cfg, uid, 'mrp.production', [['date_start', '>=', dateFrom], ['state', '!=', 'cancel']], ['product_qty'], ['date_start:month']),
-    directReadGroup(cfg, uid, 'mrp.production', [['state', '=', 'done'], ['date_start', '>=', dateFrom]], ['product_qty', 'qty_produced'], ['product_id']),
-    directSearchCount(cfg, uid, 'mrp.production', [['date_start', '<', directToday()], ['state', 'not in', ['done', 'cancel']]]),
+    directReadGroup(cfg, uid, 'mrp.production', directWithCompany([['date_start', '>=', dateFrom], ['date_start', '<=', dateTo]], companyId), ['product_qty'], ['state']),
+    directReadGroup(cfg, uid, 'mrp.production', directWithCompany([['date_start', '>=', dateFrom], ['date_start', '<=', dateTo], ['state', '!=', 'cancel']], companyId), ['product_qty'], ['date_start:month']),
+    directReadGroup(cfg, uid, 'mrp.production', directWithCompany([['state', '=', 'done'], ['date_start', '>=', dateFrom], ['date_start', '<=', dateTo]], companyId), ['product_qty', 'qty_produced'], ['product_id']),
+    directSearchCount(cfg, uid, 'mrp.production', directWithCompany([['date_start', '<', directToday()], ['state', 'not in', ['done', 'cancel']]], companyId)),
   ]);
 
   return {
+    period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
       total_orders: byState.reduce((s, r) => s + r.__count, 0),
       done: byState.find(r => r.state === 'done')?.__count || 0,
@@ -332,9 +364,10 @@ async function directBuildManufacturingReport(cfg, uid, params) {
 async function fetchOdooReportDirect(path, params, cfg) {
   const uid = await directAuthenticate(cfg);
   switch (path) {
+    case '/api/companies': return directBuildCompaniesReport(cfg, uid);
     case '/api/sales': return directBuildSalesReport(cfg, uid, params);
     case '/api/financials': return directBuildFinancialsReport(cfg, uid, params);
-    case '/api/inventory': return directBuildInventoryReport(cfg, uid);
+    case '/api/inventory': return directBuildInventoryReport(cfg, uid, params);
     case '/api/purchase': return directBuildPurchaseReport(cfg, uid, params);
     case '/api/manufacturing': return directBuildManufacturingReport(cfg, uid, params);
     default: throw new Error(`Unknown report path: ${path}`);

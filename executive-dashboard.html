@@ -26,6 +26,7 @@
 
   <div class="controls">
     <span style="font-size:.85rem;color:var(--muted)" id="asOfLabel"></span>
+    <div id="companySwitcher"></div>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -45,8 +46,8 @@
   </p>
 </div>
 
-<script src="assets/odoo-client.js?v=6"></script>
-<script src="assets/odoo-dashboard.js?v=6"></script>
+<script src="assets/odoo-client.js?v=7"></script>
+<script src="assets/odoo-dashboard.js?v=7"></script>
 <script>
 function monthRange(monthsBack) {
   const now = new Date();
@@ -235,6 +236,7 @@ function render(d) {
 }
 
 load();
+renderCompanySwitcher('companySwitcher');
 </script>
 </body>
 </html>

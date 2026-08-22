@@ -29,6 +29,13 @@
     <button class="period-btn" data-p="quarter" onclick="setPeriod('quarter',this)">This Quarter</button>
     <button class="period-btn active" data-p="year" onclick="setPeriod('year',this)">This Year</button>
     <button class="period-btn" data-p="12m" onclick="setPeriod('12m',this)">Last 12 Months</button>
+    <div class="date-range">
+      <input type="date" id="dateFrom">
+      <span style="color:var(--muted);font-size:.8rem">to</span>
+      <input type="date" id="dateTo">
+      <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
+    </div>
+    <div id="companySwitcher"></div>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -56,10 +63,11 @@
   <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="reportNote"></p>
 </div>
 
-<script src="assets/odoo-client.js?v=6"></script>
-<script src="assets/odoo-dashboard.js?v=6"></script>
+<script src="assets/odoo-client.js?v=7"></script>
+<script src="assets/odoo-dashboard.js?v=7"></script>
 <script>
 let period = 'year';
+let customRange = null;
 let lastData = null;
 
 function switchTab(tab, btn) {
@@ -71,8 +79,20 @@ function switchTab(tab, btn) {
 
 function setPeriod(p, btn) {
   period = p;
+  customRange = null;
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  load();
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  if (!from || !to) { alert('Please pick both a start and end date.'); return; }
+  customRange = { date_from: from, date_to: to };
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   load();
 }
 
@@ -99,7 +119,7 @@ async function load() {
   document.getElementById('setupNote').style.display = 'none';
   showState('stateBanner', 'loading', 'Loading financial data from Odoo…');
   try {
-    const { date_from, date_to } = periodRange(period);
+    const { date_from, date_to } = customRange || periodRange(period);
     const data = await fetchOdooReport('/api/financials', { date_from, date_to });
     showState('stateBanner', null);
     lastData = data;
@@ -143,6 +163,7 @@ function render(data) {
 }
 
 load();
+renderCompanySwitcher('companySwitcher');
 </script>
 </body>
 </html>
