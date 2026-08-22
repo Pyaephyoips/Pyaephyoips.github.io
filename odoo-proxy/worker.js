@@ -102,6 +102,20 @@ async function searchCount(env, uid, model, domain) {
   return executeKw(env, uid, model, 'search_count', [domain]);
 }
 
+// Every model used by these reports (sale/purchase orders + lines,
+// account.move.line, stock.quant/move/orderpoint, mrp.production) carries
+// its own direct company_id field, so a single leaf works everywhere —
+// no dotted/related paths needed.
+function withCompany(domain, companyId) {
+  return companyId ? [...domain, ['company_id', '=', companyId]] : domain;
+}
+
+function getCompanyId(params) {
+  const raw = params.get('company_id');
+  const id = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(id) ? id : null;
+}
+
 // ── Date helpers ────────────────────────────────────────────────────────
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 function monthsAgo(n) {
@@ -112,35 +126,50 @@ function monthsAgo(n) {
 }
 function today() { return isoDate(new Date()); }
 
+// date_from/date_to win when given (custom range picker); otherwise fall
+// back to the months-count preset for backward compatibility.
+function resolveRange(params) {
+  const dateTo = params.get('date_to') || today();
+  const dateFrom = params.get('date_from')
+    || monthsAgo(Math.min(parseInt(params.get('months') || '12', 10), 36) - 1);
+  return { dateFrom, dateTo };
+}
+
 // ── Report builders ─────────────────────────────────────────────────────
+async function buildCompaniesReport(env, uid) {
+  const companies = await searchRead(env, uid, 'res.company', [], ['id', 'name'], { order: 'name' });
+  return { companies };
+}
+
 async function buildSalesReport(env, uid, params) {
-  const months = Math.min(parseInt(params.get('months') || '12', 10), 36);
-  const dateFrom = monthsAgo(months - 1);
+  const companyId = getCompanyId(params);
+  const { dateFrom, dateTo } = resolveRange(params);
   const soldStates = ['sale', 'done'];
 
   const [totals, monthly, byProduct, byCustomer, bySalesperson, pendingCount] = await Promise.all([
     readGroup(env, uid, 'sale.order',
-      [['state', 'in', soldStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], []),
     readGroup(env, uid, 'sale.order',
-      [['state', 'in', soldStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['date_order:month']),
     readGroup(env, uid, 'sale.order.line',
-      [['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]],
+      withCompany([['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['order_id.date_order', '<=', dateTo], ['display_type', '=', false]], companyId),
       ['price_subtotal', 'product_uom_qty'], ['product_id']),
     readGroup(env, uid, 'sale.order',
-      [['state', 'in', soldStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['partner_id']),
     readGroup(env, uid, 'sale.order',
-      [['state', 'in', soldStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['user_id']),
-    searchCount(env, uid, 'sale.order', [['state', 'in', ['draft', 'sent']]]),
+    searchCount(env, uid, 'sale.order', withCompany([['state', 'in', ['draft', 'sent']]], companyId)),
   ]);
 
   const totalSales = totals[0]?.amount_total || 0;
   const orderCount = totals[0]?.__count || 0;
 
   return {
+    period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
       total_sales: totalSales,
       order_count: orderCount,
@@ -155,6 +184,7 @@ async function buildSalesReport(env, uid, params) {
 }
 
 async function buildFinancialsReport(env, uid, params) {
+  const companyId = getCompanyId(params);
   const dateFrom = params.get('date_from') || monthsAgo(11);
   const dateTo = params.get('date_to') || today();
 
@@ -165,10 +195,10 @@ async function buildFinancialsReport(env, uid, params) {
   // below instead, which is always a plain field access.
   const [plByAccount, bsByAccount] = await Promise.all([
     readGroup(env, uid, 'account.move.line',
-      [['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo]],
+      withCompany([['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo]], companyId),
       ['balance'], ['account_id']),
     readGroup(env, uid, 'account.move.line',
-      [['parent_state', '=', 'posted'], ['date', '<=', dateTo]],
+      withCompany([['parent_state', '=', 'posted'], ['date', '<=', dateTo]], companyId),
       ['balance'], ['account_id']),
   ]);
 
@@ -218,8 +248,9 @@ async function buildFinancialsReport(env, uid, params) {
   };
 }
 
-async function buildInventoryReport(env, uid) {
-  const internalDomain = [['location_id.usage', '=', 'internal']];
+async function buildInventoryReport(env, uid, params) {
+  const companyId = getCompanyId(params);
+  const internalDomain = withCompany([['location_id.usage', '=', 'internal']], companyId);
 
   // stock.quant.value is only populated under "Automated" inventory
   // valuation — with the common "Manual" valuation method it silently
@@ -255,11 +286,11 @@ async function buildInventoryReport(env, uid) {
 
   const [lowStock, last30In, last30Out] = await Promise.all([
     searchRead(env, uid, 'stock.warehouse.orderpoint',
-      [['qty_to_order', '>', 0]], ['product_id', 'qty_to_order', 'product_min_qty'], { limit: 20 }),
+      withCompany([['qty_to_order', '>', 0]], companyId), ['product_id', 'qty_to_order', 'product_min_qty'], { limit: 20 }),
     searchCount(env, uid, 'stock.move',
-      [['state', '=', 'done'], ['date', '>=', monthsAgo(1)], ['picking_type_id.code', '=', 'incoming']]),
+      withCompany([['state', '=', 'done'], ['date', '>=', monthsAgo(1)], ['picking_type_id.code', '=', 'incoming']], companyId)),
     searchCount(env, uid, 'stock.move',
-      [['state', '=', 'done'], ['date', '>=', monthsAgo(1)], ['picking_type_id.code', '=', 'outgoing']]),
+      withCompany([['state', '=', 'done'], ['date', '>=', monthsAgo(1)], ['picking_type_id.code', '=', 'outgoing']], companyId)),
   ]);
 
   return {
@@ -281,30 +312,31 @@ async function buildInventoryReport(env, uid) {
 }
 
 async function buildPurchaseReport(env, uid, params) {
-  const months = Math.min(parseInt(params.get('months') || '12', 10), 36);
-  const dateFrom = monthsAgo(months - 1);
+  const companyId = getCompanyId(params);
+  const { dateFrom, dateTo } = resolveRange(params);
   const purchasedStates = ['purchase', 'done'];
 
   const [totals, monthly, byProduct, bySupplier, pendingCount] = await Promise.all([
     readGroup(env, uid, 'purchase.order',
-      [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], []),
     readGroup(env, uid, 'purchase.order',
-      [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['date_order:month']),
     readGroup(env, uid, 'purchase.order.line',
-      [['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['display_type', '=', false]],
+      withCompany([['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['order_id.date_order', '<=', dateTo], ['display_type', '=', false]], companyId),
       ['price_subtotal', 'product_qty'], ['product_id']),
     readGroup(env, uid, 'purchase.order',
-      [['state', 'in', purchasedStates], ['date_order', '>=', dateFrom]],
+      withCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['partner_id']),
-    searchCount(env, uid, 'purchase.order', [['state', 'in', ['draft', 'sent', 'to approve']]]),
+    searchCount(env, uid, 'purchase.order', withCompany([['state', 'in', ['draft', 'sent', 'to approve']]], companyId)),
   ]);
 
   const totalSpend = totals[0]?.amount_total || 0;
   const orderCount = totals[0]?.__count || 0;
 
   return {
+    period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
       total_spend: totalSpend,
       order_count: orderCount,
@@ -318,23 +350,24 @@ async function buildPurchaseReport(env, uid, params) {
 }
 
 async function buildManufacturingReport(env, uid, params) {
-  const months = Math.min(parseInt(params.get('months') || '12', 10), 36);
-  const dateFrom = monthsAgo(months - 1);
+  const companyId = getCompanyId(params);
+  const { dateFrom, dateTo } = resolveRange(params);
 
   const [byState, monthly, byProduct, delayedCount] = await Promise.all([
     readGroup(env, uid, 'mrp.production',
-      [['date_start', '>=', dateFrom]], ['product_qty'], ['state']),
+      withCompany([['date_start', '>=', dateFrom], ['date_start', '<=', dateTo]], companyId), ['product_qty'], ['state']),
     readGroup(env, uid, 'mrp.production',
-      [['date_start', '>=', dateFrom], ['state', '!=', 'cancel']],
+      withCompany([['date_start', '>=', dateFrom], ['date_start', '<=', dateTo], ['state', '!=', 'cancel']], companyId),
       ['product_qty'], ['date_start:month']),
     readGroup(env, uid, 'mrp.production',
-      [['state', '=', 'done'], ['date_start', '>=', dateFrom]],
+      withCompany([['state', '=', 'done'], ['date_start', '>=', dateFrom], ['date_start', '<=', dateTo]], companyId),
       ['product_qty', 'qty_produced'], ['product_id']),
     searchCount(env, uid, 'mrp.production',
-      [['date_start', '<', today()], ['state', 'not in', ['done', 'cancel']]]),
+      withCompany([['date_start', '<', today()], ['state', 'not in', ['done', 'cancel']]], companyId)),
   ]);
 
   return {
+    period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
       total_orders: byState.reduce((s, r) => s + r.__count, 0),
       done: byState.find(r => r.state === 'done')?.__count || 0,
@@ -364,6 +397,9 @@ export default {
       const uid = await odooAuthenticate(env);
       let result;
       switch (url.pathname) {
+        case '/api/companies':
+          result = await buildCompaniesReport(env, uid);
+          break;
         case '/api/sales':
           result = await buildSalesReport(env, uid, url.searchParams);
           break;
@@ -371,7 +407,7 @@ export default {
           result = await buildFinancialsReport(env, uid, url.searchParams);
           break;
         case '/api/inventory':
-          result = await buildInventoryReport(env, uid);
+          result = await buildInventoryReport(env, uid, url.searchParams);
           break;
         case '/api/purchase':
           result = await buildPurchaseReport(env, uid, url.searchParams);

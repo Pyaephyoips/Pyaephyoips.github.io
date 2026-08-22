@@ -30,6 +30,13 @@
     <button class="period-btn" data-m="6" onclick="setPeriod(6,this)">6 Months</button>
     <button class="period-btn active" data-m="12" onclick="setPeriod(12,this)">12 Months</button>
     <button class="period-btn" data-m="24" onclick="setPeriod(24,this)">24 Months</button>
+    <div class="date-range">
+      <input type="date" id="dateFrom">
+      <span style="color:var(--muted);font-size:.8rem">to</span>
+      <input type="date" id="dateTo">
+      <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
+    </div>
+    <div id="companySwitcher"></div>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -52,10 +59,11 @@
   </div>
 </div>
 
-<script src="assets/odoo-client.js?v=6"></script>
-<script src="assets/odoo-dashboard.js?v=6"></script>
+<script src="assets/odoo-client.js?v=7"></script>
+<script src="assets/odoo-dashboard.js?v=7"></script>
 <script>
 let months = 12;
+let customRange = null;
 
 const STATE_LABELS = {
   draft: 'Draft', confirmed: 'Confirmed', progress: 'In Progress',
@@ -64,8 +72,20 @@ const STATE_LABELS = {
 
 function setPeriod(m, btn) {
   months = m;
+  customRange = null;
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+  load();
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  if (!from || !to) { alert('Please pick both a start and end date.'); return; }
+  customRange = { date_from: from, date_to: to };
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   load();
 }
 
@@ -78,7 +98,7 @@ async function load() {
   document.getElementById('setupNote').style.display = 'none';
   showState('stateBanner', 'loading', 'Loading manufacturing data from Odoo…');
   try {
-    const data = await fetchOdooReport('/api/manufacturing', { months });
+    const data = await fetchOdooReport('/api/manufacturing', customRange || { months });
     showState('stateBanner', null);
     render(data);
   } catch (err) {
@@ -102,6 +122,7 @@ function render(data) {
 }
 
 load();
+renderCompanySwitcher('companySwitcher');
 </script>
 </body>
 </html>

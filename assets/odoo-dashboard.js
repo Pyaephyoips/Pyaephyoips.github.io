@@ -25,10 +25,50 @@ function odooConfigured() {
   return odooProxyConfigured() || Boolean(getDirectConfig());
 }
 
+// ── Multi-company ─────────────────────────────────────────────────────────
+const ODOO_COMPANY_STORAGE_KEY = 'odoo_selected_company_id';
+
+function getSelectedCompanyId() {
+  return localStorage.getItem(ODOO_COMPANY_STORAGE_KEY) || '';
+}
+
+function setSelectedCompanyId(id) {
+  if (id) localStorage.setItem(ODOO_COMPANY_STORAGE_KEY, id);
+  else localStorage.removeItem(ODOO_COMPANY_STORAGE_KEY);
+}
+
+function onCompanyChange(id) {
+  setSelectedCompanyId(id);
+  if (typeof load === 'function') load();
+}
+
+// Fetches the company list and renders a <select> into containerId, with an
+// "All Companies (Consolidated)" option alongside each individual company.
+// Selecting one persists to localStorage (read by fetchOdooReport below)
+// and re-runs the page's load() function, if it defines one.
+async function renderCompanySwitcher(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el || !odooConfigured()) return;
+  try {
+    const { companies } = await fetchOdooReport('/api/companies');
+    if (!companies || companies.length < 2) { el.innerHTML = ''; return; }
+    const current = getSelectedCompanyId();
+    const options = ['<option value="">All Companies (Consolidated)</option>']
+      .concat(companies.map(c => `<option value="${c.id}" ${String(c.id) === String(current) ? 'selected' : ''}>${c.name}</option>`));
+    el.innerHTML = `<select class="company-select" onchange="onCompanyChange(this.value)">${options.join('')}</select>`;
+  } catch (err) {
+    // Non-fatal — leave the switcher empty (e.g. the Odoo user lacks
+    // multi-company access); the reports themselves still work.
+    el.innerHTML = '';
+  }
+}
+
 async function fetchOdooReport(path, params = {}) {
+  const companyId = getSelectedCompanyId();
+  const finalParams = (companyId && params.company_id === undefined) ? { ...params, company_id: companyId } : params;
   if (odooProxyConfigured()) {
     const url = new URL(ODOO_PROXY_CONFIG.baseUrl.replace(/\/$/, '') + path);
-    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v); });
+    Object.entries(finalParams).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v); });
     const res = await fetch(url.toString(), {
       headers: { 'X-Proxy-Token': ODOO_PROXY_CONFIG.token },
     });
@@ -38,7 +78,7 @@ async function fetchOdooReport(path, params = {}) {
   }
   const directCfg = getDirectConfig();
   if (directCfg) {
-    return fetchOdooReportDirect(path, params, directCfg);
+    return fetchOdooReportDirect(path, finalParams, directCfg);
   }
   throw new Error('SETUP_REQUIRED');
 }
