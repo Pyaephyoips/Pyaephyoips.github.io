@@ -122,7 +122,9 @@ td.num, th.num { text-align: right; }
 
 /* ── Executive dashboard ── */
 .exec-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.exec-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem; }
+.exec-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.1rem; transition: border-color .15s, transform .15s; }
+.exec-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+.exec-tile .spark { width: 100%; height: 32px; display: block; margin-top: 0.5rem; }
 .exec-tile .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
 .exec-tile .value { font-size: 1.6rem; font-weight: 700; }
 .exec-tile .subvalue { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
@@ -146,14 +148,16 @@ td.num, th.num { text-align: right; }
 .section-label:first-child { margin-top: 0; }
 
 .ratio-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.ratio-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem; text-align: center; }
+.ratio-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem; text-align: center; transition: border-color .15s; }
+.ratio-tile:hover { border-color: var(--accent); }
 .ratio-tile .rlabel { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.35rem; }
 .ratio-tile .rvalue { font-size: 1.3rem; font-weight: 700; }
 .ratio-tile .rvalue.warn { color: var(--accent); }
 .ratio-tile .rvalue.bad { color: var(--red); }
 
 .snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.snapshot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.snapshot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; gap: 0.6rem; transition: border-color .15s, transform .15s; }
+.snapshot-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .snapshot-card h3 { font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 0.4rem; }
 .snapshot-stats { display: flex; flex-direction: column; gap: 0.35rem; }
 .snapshot-stats .srow { display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--muted); }

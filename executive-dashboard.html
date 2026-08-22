@@ -45,8 +45,8 @@
   </p>
 </div>
 
-<script src="assets/odoo-client.js?v=5"></script>
-<script src="assets/odoo-dashboard.js?v=5"></script>
+<script src="assets/odoo-client.js?v=6"></script>
+<script src="assets/odoo-dashboard.js?v=6"></script>
 <script>
 function monthRange(monthsBack) {
   const now = new Date();
@@ -68,6 +68,8 @@ function renderDelta(pct) {
   return `<div class="delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</div>`;
 }
 
+const TREND_MONTHS = 6;
+
 async function load() {
   if (!odooConfigured()) {
     renderSetupNote('setupNote');
@@ -78,17 +80,19 @@ async function load() {
   showState('stateBanner', 'loading', 'Loading executive summary from Odoo…');
   try {
     const thisMonth = monthRange(0);
-    const lastMonth = monthRange(1);
-    const [finThis, finLast, sales, inventory, purchase, manufacturing] = await Promise.all([
-      fetchOdooReport('/api/financials', thisMonth),
-      fetchOdooReport('/api/financials', lastMonth),
+    // finMonths[0] = this month, finMonths[1] = last month, ... oldest last.
+    // Reused both for the MoM deltas and for the hero-tile sparklines below,
+    // instead of fetching the trend separately.
+    const monthRanges = Array.from({ length: TREND_MONTHS }, (_, i) => monthRange(i));
+    const [finMonths, sales, inventory, purchase, manufacturing] = await Promise.all([
+      Promise.all(monthRanges.map(m => fetchOdooReport('/api/financials', m))),
       fetchOdooReport('/api/sales', { months: 1 }),
       fetchOdooReport('/api/inventory'),
       fetchOdooReport('/api/purchase', { months: 1 }),
       fetchOdooReport('/api/manufacturing', { months: 1 }),
     ]);
     showState('stateBanner', null);
-    render({ finThis, finLast, sales, inventory, purchase, manufacturing, thisMonth });
+    render({ finThis: finMonths[0], finLast: finMonths[1], finMonths, sales, inventory, purchase, manufacturing, thisMonth });
   } catch (err) {
     showState('stateBanner', 'error', err.message);
   }
@@ -140,16 +144,19 @@ function render(d) {
     <div class="exec-tile">
       <div class="label">💰 Cash Position</div>
       <div class="value">${fmtCompact(cash)}</div>
+      <svg class="spark" id="sparkCash"></svg>
     </div>
     <div class="exec-tile">
       <div class="label">📈 Revenue</div>
       <div class="value">${fmtCompact(pl.revenue)}</div>
       ${renderDelta(revenueDelta)}
+      <svg class="spark" id="sparkRevenue"></svg>
     </div>
     <div class="exec-tile">
       <div class="label">💵 Net Profit</div>
       <div class="value" style="color:${pl.net_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtCompact(pl.net_profit)}</div>
       ${renderDelta(netProfitDelta)}
+      <svg class="spark" id="sparkNetProfit"></svg>
     </div>
     <div class="exec-tile">
       <div class="label">🩺 Overall Health</div>
@@ -160,6 +167,13 @@ function render(d) {
       <div class="flag-text ${hit.status}">${hit.flag}</div>
     </div>
   `;
+
+  // Chronological (oldest -> newest) trend series from the same monthly
+  // financials calls used for the MoM deltas above — no extra requests.
+  const chrono = [...d.finMonths].reverse();
+  renderSparkline('sparkCash', chrono.map(f => f.balance_sheet.by_type?.asset_cash || 0), { color: '#38bdf8' });
+  renderSparkline('sparkRevenue', chrono.map(f => f.profit_and_loss.revenue), { color: '#22c55e' });
+  renderSparkline('sparkNetProfit', chrono.map(f => f.profit_and_loss.net_profit), { color: pl.net_profit >= 0 ? '#22c55e' : '#ef4444' });
 
   const fmtRatio = v => v === null || !isFinite(v) ? '—' : v.toFixed(2);
   const fmtPct = v => v === null || !isFinite(v) ? '—' : v.toFixed(1) + '%';
