@@ -11,6 +11,9 @@ A static GitHub Pages site for Skybridge Business Solution.
 - `executive-dashboard.html`, `sales-dashboard.html`, `financial-dashboard.html`,
   `inventory-dashboard.html`, `purchase-dashboard.html`, `manufacturing-dashboard.html`
   are Odoo-backed ERP dashboards (see below).
+- `odoo-course.html` is a full 8-week instructor-ready curriculum for teaching
+  Odoo Sale, CRM, Accounting, and Project — session plans, labs, a capstone
+  project, and grading/certification guidance.
 
 ## Customize
 

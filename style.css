@@ -834,10 +834,173 @@ main {
   text-align: center;
 }
 
+.course-hero {
+  padding: clamp(56px, 8vw, 96px) 0 40px;
+}
+
+.course-hero h1 {
+  margin: 0;
+  color: var(--heading);
+  font-size: clamp(2.4rem, 5.4vw, 4rem);
+  font-weight: 900;
+  line-height: 1.08;
+}
+
+.course-lede {
+  max-width: 760px;
+  margin-top: 22px;
+  color: var(--muted);
+  font-size: clamp(1.05rem, 1.4vw, 1.2rem);
+}
+
+.course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.course-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.module-list {
+  display: grid;
+  gap: 22px;
+}
+
+.module-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.module-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.module-head h3 {
+  margin: 0;
+  color: var(--heading);
+  font-size: clamp(1.35rem, 2vw, 1.65rem);
+}
+
+.module-duration {
+  color: var(--accent);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.module-card > p {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.module-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+  margin-top: 18px;
+}
+
+.module-columns h4 {
+  margin: 0 0 10px;
+  color: var(--heading);
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.session-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  counter-reset: session;
+  color: var(--text);
+  font-size: 0.98rem;
+  list-style: none;
+}
+
+.session-list li {
+  position: relative;
+  padding-left: 26px;
+  counter-increment: session;
+}
+
+.session-list li::before {
+  content: counter(session) ".";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.lab-box {
+  margin: 0;
+  color: var(--muted);
+}
+
+.lab-box b {
+  color: var(--accent);
+}
+
+.schedule-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.schedule-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.schedule-table th {
+  background: var(--panel-soft);
+  color: var(--heading);
+  font-weight: 800;
+}
+
+.schedule-table td {
+  color: var(--muted);
+}
+
+.schedule-table tr:last-child td {
+  border-bottom: none;
+}
+
 @media (max-width: 900px) {
   .social-rail,
   .email-rail {
     display: none;
+  }
+
+  .module-columns {
+    grid-template-columns: 1fr;
   }
 
   .about-grid,
