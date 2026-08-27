@@ -166,6 +166,25 @@ async function directBuildSalesReport(cfg, uid, params) {
   const totalSales = totals[0]?.amount_total || 0;
   const orderCount = totals[0]?.__count || 0;
 
+  // Category per product, for the top-products table and the category
+  // rollup below. byProduct already covers every product sold in the
+  // period (directTopN only slices the top 10 for display), so the rollup
+  // is complete even though the table itself is capped.
+  const soldProductIds = byProduct.filter(r => r.product_id).map(r => r.product_id[0]);
+  const soldProducts = soldProductIds.length
+    ? await directExecuteKw(cfg, uid, 'product.product', 'read', [soldProductIds, ['categ_id']])
+    : [];
+  const categById = Object.fromEntries(soldProducts.map(p => [p.id, p.categ_id ? p.categ_id[1] : 'Uncategorized']));
+
+  const byCategory = {};
+  for (const r of byProduct) {
+    if (!r.product_id) continue;
+    const cat = categById[r.product_id[0]] || 'Uncategorized';
+    if (!byCategory[cat]) byCategory[cat] = { total: 0, qty: 0 };
+    byCategory[cat].total += r.price_subtotal || 0;
+    byCategory[cat].qty += r.product_uom_qty || 0;
+  }
+
   return {
     period: { date_from: dateFrom, date_to: dateTo },
     kpis: {
@@ -175,7 +194,14 @@ async function directBuildSalesReport(cfg, uid, params) {
       pending_quotations: pendingCount,
     },
     monthly_trend: monthly.map(r => ({ month: r['date_order:month'], total: r.amount_total, count: r.__count })),
-    top_products: directTopN(byProduct, 'price_subtotal').map(r => ({ product: r.product_id ? r.product_id[1] : 'Unknown', total: r.price_subtotal, qty: r.product_uom_qty })),
+    top_products: directTopN(byProduct, 'price_subtotal').map(r => ({
+      product: r.product_id ? r.product_id[1] : 'Unknown',
+      category: r.product_id ? (categById[r.product_id[0]] || 'Uncategorized') : 'Uncategorized',
+      total: r.price_subtotal, qty: r.product_uom_qty,
+    })),
+    by_category: Object.entries(byCategory)
+      .map(([category, v]) => ({ category, total: v.total, qty: v.qty }))
+      .sort((a, b) => b.total - a.total),
     top_customers: directTopN(byCustomer, 'amount_total').map(r => ({ customer: r.partner_id ? r.partner_id[1] : 'Unknown', total: r.amount_total, count: r.__count })),
     by_salesperson: directTopN(bySalesperson, 'amount_total').map(r => ({ salesperson: r.user_id ? r.user_id[1] : 'Unassigned', total: r.amount_total, count: r.__count })),
   };

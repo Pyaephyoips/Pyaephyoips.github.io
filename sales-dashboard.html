@@ -49,13 +49,21 @@
 
   <div class="two-col">
     <div class="section-card">
-      <div class="section-header"><h3>🏆 Top Products</h3></div>
-      <div id="topProducts"></div>
+      <div class="section-header"><h3>🗂 Sales by Product Category</h3></div>
+      <div id="byCategory"></div>
     </div>
     <div class="section-card">
       <div class="section-header"><h3>👤 Top Customers</h3></div>
       <div id="topCustomers"></div>
     </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-header"><h3>🏆 Top Products</h3></div>
+    <table>
+      <thead><tr><th>Product</th><th>Category</th><th class="num">Qty</th><th class="num">Total</th></tr></thead>
+      <tbody id="topProductsBody"></tbody>
+    </table>
   </div>
 
   <div class="section-card">
@@ -67,8 +75,8 @@
   </div>
 </div>
 
-<script src="assets/odoo-client.js?v=7"></script>
-<script src="assets/odoo-dashboard.js?v=7"></script>
+<script src="assets/odoo-client.js?v=9"></script>
+<script src="assets/odoo-dashboard.js?v=9"></script>
 <script>
 let months = 12;
 let customRange = null;
@@ -120,8 +128,17 @@ function render(data) {
 
   renderTrendChart('trendChart', data.monthly_trend.map(r => ({ label: r.month.split(' ')[0].slice(0,3), value: r.total })));
 
-  renderRankBars('topProducts', data.top_products.map(p => ({ label: p.product, value: p.total })), { prefix: '' });
+  renderRankBars('byCategory', (data.by_category || []).map(c => ({ label: c.category, value: c.total })), { prefix: '' });
   renderRankBars('topCustomers', data.top_customers.map(c => ({ label: c.customer, value: c.total })), { prefix: '' });
+
+  renderTable('topProductsBody', data.top_products, r => `
+    <tr>
+      <td>${r.product}</td>
+      <td>${r.category || ''}</td>
+      <td class="num">${fmtInt(r.qty)}</td>
+      <td class="num">${fmtMoney(r.total)}</td>
+    </tr>
+  `, 4);
 
   renderTable('salespersonBody', data.by_salesperson, r => `
     <tr>
