@@ -83,6 +83,29 @@ async function fetchOdooReport(path, params = {}) {
   throw new Error('SETUP_REQUIRED');
 }
 
+// ── Excel export (SheetJS, loaded from CDN as the global `XLSX`) ─────────
+// Each page includes the CDN script tag itself; this just builds a
+// workbook from whatever data that page already has loaded (no extra
+// Odoo calls) and triggers a browser download. sheets: [{ name, headers,
+// rows: array of arrays }].
+function exportToExcel(filename, sheets) {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel export library failed to load — check your internet connection and try again.');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(({ name, headers, rows }) => {
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); // Excel sheet names cap at 31 chars
+  });
+  XLSX.writeFile(wb, filename);
+}
+
+function exportFilename(prefix) {
+  const d = new Date().toISOString().slice(0, 10);
+  return `${prefix}-${d}.xlsx`;
+}
+
 // ── Formatting ──────────────────────────────────────────────────────────
 function fmtMoney(n) {
   const v = Number(n) || 0;

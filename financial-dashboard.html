@@ -36,6 +36,8 @@
       <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
     </div>
     <div id="companySwitcher"></div>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -97,8 +99,9 @@
   <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="reportNote"></p>
 </div>
 
-<script src="assets/odoo-client.js?v=8"></script>
-<script src="assets/odoo-dashboard.js?v=8"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=10"></script>
+<script src="assets/odoo-dashboard.js?v=10"></script>
 <script>
 let period = 'year';
 let customRange = null;
@@ -208,6 +211,41 @@ function render(data) {
   ], { colorFn: r => r.label === 'Assets' ? 'var(--blue)' : (r.label === 'Liabilities' ? 'var(--red)' : 'var(--green)') });
 
   document.getElementById('reportNote').textContent = data.note || '';
+}
+
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  const pl = d.profit_and_loss;
+  const bs = d.balance_sheet;
+  const detail = d.pl_detail || { revenue: [], cogs: [], opex: [] };
+  const acctRows = list => list.map(r => [r.code ? `${r.code} — ${r.account}` : r.account, r.balance]);
+  exportToExcel(exportFilename('financial-dashboard'), [
+    {
+      name: 'P&L Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Revenue', pl.revenue],
+        ['COGS', pl.cogs],
+        ['Gross Profit', pl.gross_profit],
+        ['Operating Expenses', pl.operating_expenses],
+        ['Net Profit', pl.net_profit],
+      ],
+    },
+    { name: 'Revenue by Account', headers: ['Account', 'Amount'], rows: acctRows(detail.revenue) },
+    { name: 'COGS by Account', headers: ['Account', 'Amount'], rows: acctRows(detail.cogs) },
+    { name: 'Opex by Account', headers: ['Account', 'Amount'], rows: acctRows(detail.opex) },
+    {
+      name: 'Balance Sheet',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Assets', bs.assets],
+        ['Liabilities', bs.liabilities],
+        ['Equity', bs.equity],
+        ['Liabilities + Equity', bs.liabilities_and_equity],
+      ],
+    },
+  ]);
 }
 
 load();

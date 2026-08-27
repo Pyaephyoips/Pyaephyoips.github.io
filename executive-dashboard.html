@@ -27,6 +27,8 @@
   <div class="controls">
     <span style="font-size:.85rem;color:var(--muted)" id="asOfLabel"></span>
     <div id="companySwitcher"></div>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -46,9 +48,12 @@
   </p>
 </div>
 
-<script src="assets/odoo-client.js?v=7"></script>
-<script src="assets/odoo-dashboard.js?v=7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=10"></script>
+<script src="assets/odoo-dashboard.js?v=10"></script>
 <script>
+let lastData = null;
+
 function monthRange(monthsBack) {
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth() - monthsBack, 1);
@@ -93,7 +98,8 @@ async function load() {
       fetchOdooReport('/api/manufacturing', { months: 1 }),
     ]);
     showState('stateBanner', null);
-    render({ finThis: finMonths[0], finLast: finMonths[1], finMonths, sales, inventory, purchase, manufacturing, thisMonth });
+    lastData = { finThis: finMonths[0], finLast: finMonths[1], finMonths, sales, inventory, purchase, manufacturing, thisMonth };
+    render(lastData);
   } catch (err) {
     showState('stateBanner', 'error', err.message);
   }
@@ -233,6 +239,88 @@ function render(d) {
       <a class="view-link" href="manufacturing-dashboard.html">View Manufacturing Dashboard →</a>
     </div>
   `;
+}
+
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  const pl = d.finThis.profit_and_loss;
+  const bs = d.finThis.balance_sheet;
+  const byType = bs.by_type || {};
+  const cash = byType.asset_cash || 0;
+  const netMargin = pl.revenue ? (pl.net_profit / pl.revenue) * 100 : 0;
+  const grossMargin = pl.revenue ? (pl.gross_profit / pl.revenue) * 100 : 0;
+  const currentAssets = (byType.asset_cash || 0) + (byType.asset_receivable || 0) + (byType.asset_current || 0);
+  const currentLiabilities = (byType.liability_payable || 0) + (byType.liability_current || 0);
+  const quickAssets = (byType.asset_cash || 0) + (byType.asset_receivable || 0);
+  const currentRatio = currentLiabilities ? currentAssets / currentLiabilities : null;
+  const quickRatio = currentLiabilities ? quickAssets / currentLiabilities : null;
+  const inventoryValue = d.inventory.kpis.total_inventory_value || 0;
+  const inventoryTurnover = inventoryValue ? (pl.cogs * 12) / inventoryValue : null;
+  const daysInPeriod = Math.max(1, (new Date(d.thisMonth.date_to) - new Date(d.thisMonth.date_from)) / 86400000 + 1);
+  const receivableDays = pl.revenue ? ((byType.asset_receivable || 0) / pl.revenue) * daysInPeriod : null;
+  const sk = d.sales.kpis, ik = d.inventory.kpis, pk = d.purchase.kpis, mk = d.manufacturing.kpis;
+
+  exportToExcel(exportFilename('executive-dashboard'), [
+    {
+      name: 'Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Cash Position', cash],
+        ['Revenue (this month)', pl.revenue],
+        ['Net Profit (this month)', pl.net_profit],
+      ],
+    },
+    {
+      name: 'Financial Ratios',
+      headers: ['Ratio', 'Value'],
+      rows: [
+        ['Current Ratio', currentRatio],
+        ['Quick Ratio', quickRatio],
+        ['Gross Margin %', grossMargin],
+        ['Net Margin %', netMargin],
+        ['Inventory Turnover (x)', inventoryTurnover],
+        ['Receivable Days', receivableDays],
+      ],
+    },
+    {
+      name: 'Sales',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Sales this month', sk.total_sales],
+        ['Orders', sk.order_count],
+        ['Pending Quotations', sk.pending_quotations],
+      ],
+    },
+    {
+      name: 'Inventory',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Inventory Value', ik.total_inventory_value],
+        ['Low Stock Items', ik.low_stock_items],
+        ['Moves In (30d)', ik.moves_last_30d_in],
+        ['Moves Out (30d)', ik.moves_last_30d_out],
+      ],
+    },
+    {
+      name: 'Purchase',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Spend this month', pk.total_spend],
+        ['Orders', pk.order_count],
+        ['Pending Orders', pk.pending_orders],
+      ],
+    },
+    {
+      name: 'Manufacturing',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Orders this month', mk.total_orders],
+        ['Done', mk.done],
+        ['Delayed', mk.delayed],
+      ],
+    },
+  ]);
 }
 
 load();

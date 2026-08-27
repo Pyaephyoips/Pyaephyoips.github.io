@@ -39,6 +39,13 @@ presets (3/6/12/24) plus a custom From/To date picker; Balance Sheet & P&L
 offers quarter/year/last-12-months presets plus the same custom picker.
 Picking a custom range overrides the preset until you pick a preset again.
 
+**Exporting:** every dashboard has an **⬇ Excel** button, which downloads
+the currently loaded data as a multi-sheet `.xlsx` workbook (one sheet per
+table/section), and a **🖨 PDF** button, which opens the browser's print
+dialog with the controls/nav hidden — choose "Save as PDF" as the
+destination. Both export exactly what's on screen, so apply your company
+and date-range filters first, then export.
+
 ### Option A — Direct connection (no backend to deploy)
 
 Open any dashboard page and use the **Connect to Odoo** form it shows —
