@@ -50,6 +50,40 @@
       <div class="section-header"><h3>Revenue → Net Profit</h3></div>
       <div id="plWaterfall" style="padding:0.75rem 0"></div>
     </div>
+
+    <div class="two-col">
+      <div class="section-card">
+        <div class="section-header">
+          <h3>📈 Revenue by Account</h3>
+          <span class="total pos" id="plRevenueTotal">0.00</span>
+        </div>
+        <table>
+          <thead><tr><th>Account</th><th class="num">Amount</th></tr></thead>
+          <tbody id="plRevenueDetail"></tbody>
+        </table>
+      </div>
+      <div class="section-card">
+        <div class="section-header">
+          <h3>📦 Cost of Goods Sold by Account</h3>
+          <span class="total neg" id="plCogsTotal">0.00</span>
+        </div>
+        <table>
+          <thead><tr><th>Account</th><th class="num">Amount</th></tr></thead>
+          <tbody id="plCogsDetail"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header">
+        <h3>💼 Operating Expenses by Account</h3>
+        <span class="total neg" id="plOpexTotal">0.00</span>
+      </div>
+      <table>
+        <thead><tr><th>Account</th><th class="num">Amount</th></tr></thead>
+        <tbody id="plOpexDetail"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="tab-panel" id="bsPanel">
@@ -63,8 +97,8 @@
   <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="reportNote"></p>
 </div>
 
-<script src="assets/odoo-client.js?v=7"></script>
-<script src="assets/odoo-dashboard.js?v=7"></script>
+<script src="assets/odoo-client.js?v=8"></script>
+<script src="assets/odoo-dashboard.js?v=8"></script>
 <script>
 let period = 'year';
 let customRange = null;
@@ -145,6 +179,20 @@ function render(data) {
     { label: 'Operating Expenses', value: -pl.operating_expenses },
     { label: 'Net Profit', value: pl.net_profit },
   ], { colorFn: r => r.value >= 0 ? 'var(--green)' : 'var(--red)' });
+
+  const detail = data.pl_detail || { revenue: [], cogs: [], opex: [] };
+  const accountRow = r => `
+    <tr>
+      <td>${r.code ? `${r.code} — ` : ''}${r.account}</td>
+      <td class="num">${fmtMoney(r.balance)}</td>
+    </tr>
+  `;
+  document.getElementById('plRevenueTotal').textContent = fmtMoney(pl.revenue);
+  document.getElementById('plCogsTotal').textContent = fmtMoney(pl.cogs);
+  document.getElementById('plOpexTotal').textContent = fmtMoney(pl.operating_expenses);
+  renderTable('plRevenueDetail', detail.revenue, accountRow, 2);
+  renderTable('plCogsDetail', detail.cogs, accountRow, 2);
+  renderTable('plOpexDetail', detail.opex, accountRow, 2);
 
   const bs = data.balance_sheet;
   renderKpis('bsKpiRow', [
