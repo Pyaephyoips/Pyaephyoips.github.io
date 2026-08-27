@@ -27,6 +27,8 @@
   <div class="controls">
     <span style="font-size:.85rem;color:var(--muted)">Live stock snapshot</span>
     <div id="companySwitcher"></div>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -55,9 +57,12 @@
   </div>
 </div>
 
-<script src="assets/odoo-client.js?v=7"></script>
-<script src="assets/odoo-dashboard.js?v=7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=10"></script>
+<script src="assets/odoo-dashboard.js?v=10"></script>
 <script>
+let lastData = null;
+
 async function load() {
   if (!odooConfigured()) {
     renderSetupNote('setupNote');
@@ -69,6 +74,7 @@ async function load() {
   try {
     const data = await fetchOdooReport('/api/inventory');
     showState('stateBanner', null);
+    lastData = data;
     render(data);
   } catch (err) {
     showState('stateBanner', 'error', err.message);
@@ -96,6 +102,39 @@ function render(data) {
       <td class="num" style="color:var(--accent);font-weight:700">${fmtInt(r.to_order)}</td>
     </tr>
   `, 3);
+}
+
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  exportToExcel(exportFilename('inventory-dashboard'), [
+    {
+      name: 'Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Total Inventory Value', d.kpis.total_inventory_value],
+        ['Products On Hand', d.kpis.distinct_products_on_hand],
+        ['Low Stock Items', d.kpis.low_stock_items],
+        ['Moves In (30d)', d.kpis.moves_last_30d_in],
+        ['Moves Out (30d)', d.kpis.moves_last_30d_out],
+      ],
+    },
+    {
+      name: 'Value by Category',
+      headers: ['Category', 'Value'],
+      rows: d.value_by_category.map(c => [c.category, c.value]),
+    },
+    {
+      name: 'Top by Value',
+      headers: ['Product', 'Value'],
+      rows: d.top_by_value.map(p => [p.product, p.value]),
+    },
+    {
+      name: 'Low Stock',
+      headers: ['Product', 'Min Qty', 'To Order'],
+      rows: d.low_stock.map(r => [r.product, r.min_qty, r.to_order]),
+    },
+  ]);
 }
 
 load();

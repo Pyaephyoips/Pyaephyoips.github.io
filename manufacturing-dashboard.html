@@ -37,6 +37,8 @@
       <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
     </div>
     <div id="companySwitcher"></div>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
     <button class="btn-refresh" onclick="load()">↻ Refresh</button>
   </div>
 
@@ -59,11 +61,13 @@
   </div>
 </div>
 
-<script src="assets/odoo-client.js?v=7"></script>
-<script src="assets/odoo-dashboard.js?v=7"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=10"></script>
+<script src="assets/odoo-dashboard.js?v=10"></script>
 <script>
 let months = 12;
 let customRange = null;
+let lastData = null;
 
 const STATE_LABELS = {
   draft: 'Draft', confirmed: 'Confirmed', progress: 'In Progress',
@@ -100,6 +104,7 @@ async function load() {
   try {
     const data = await fetchOdooReport('/api/manufacturing', customRange || { months });
     showState('stateBanner', null);
+    lastData = data;
     render(data);
   } catch (err) {
     showState('stateBanner', 'error', err.message);
@@ -119,6 +124,38 @@ function render(data) {
 
   renderRankBars('byState', data.by_state.map(s => ({ label: STATE_LABELS[s.state] || s.state, value: s.count })));
   renderRankBars('topProducts', data.top_products.map(p => ({ label: p.product, value: p.qty_produced })));
+}
+
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  exportToExcel(exportFilename('manufacturing-dashboard'), [
+    {
+      name: 'Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Total Orders', d.kpis.total_orders],
+        ['Done', d.kpis.done],
+        ['In Progress', d.kpis.in_progress],
+        ['Delayed', d.kpis.delayed],
+      ],
+    },
+    {
+      name: 'Monthly Trend',
+      headers: ['Month', 'Count'],
+      rows: d.monthly_trend.map(r => [r.month, r.count]),
+    },
+    {
+      name: 'By State',
+      headers: ['State', 'Count'],
+      rows: d.by_state.map(s => [STATE_LABELS[s.state] || s.state, s.count]),
+    },
+    {
+      name: 'Top Products',
+      headers: ['Product', 'Qty Produced'],
+      rows: d.top_products.map(p => [p.product, p.qty_produced]),
+    },
+  ]);
 }
 
 load();
