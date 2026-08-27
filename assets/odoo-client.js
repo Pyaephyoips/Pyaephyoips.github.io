@@ -204,13 +204,30 @@ async function directBuildFinancialsReport(cfg, uid, params) {
     [...plByAccount, ...bsByAccount].filter(g => g.account_id).map(g => g.account_id[0])
   )];
   const accounts = accountIds.length
-    ? await directExecuteKw(cfg, uid, 'account.account', 'read', [accountIds, ['account_type']])
+    ? await directExecuteKw(cfg, uid, 'account.account', 'read', [accountIds, ['account_type', 'code', 'name']])
     : [];
   const typeById = Object.fromEntries(accounts.map(a => [a.id, a.account_type]));
+  const codeById = Object.fromEntries(accounts.map(a => [a.id, a.code || '']));
+  const nameById = Object.fromEntries(accounts.map(a => [a.id, a.name || 'Unknown']));
 
   const sumByTypes = (groups, types) => groups
     .filter(g => g.account_id && types.includes(typeById[g.account_id[0]]))
     .reduce((s, g) => s + (g.balance || 0), 0);
+
+  // Per-account line items for a category (e.g. every income account that
+  // makes up Revenue) — sign-normalized the same way as the category total
+  // (revenue accounts negated, expense accounts left as-is) so a positive
+  // number always means "contributes to this category's shown value".
+  const detailByTypes = (groups, types, negate) => groups
+    .filter(g => g.account_id && types.includes(typeById[g.account_id[0]]))
+    .map(g => ({
+      account_id: g.account_id[0],
+      code: codeById[g.account_id[0]],
+      account: nameById[g.account_id[0]],
+      balance: negate ? -(g.balance || 0) : (g.balance || 0),
+    }))
+    .filter(r => Math.abs(r.balance) > 0.005)
+    .sort((a, b) => b.balance - a.balance);
 
   const revenue = -sumByTypes(plByAccount, DIRECT_PL_INCOME_TYPES);
   const cogs = sumByTypes(plByAccount, DIRECT_PL_COGS_TYPES);
@@ -235,6 +252,11 @@ async function directBuildFinancialsReport(cfg, uid, params) {
   return {
     period: { date_from: dateFrom, date_to: dateTo },
     profit_and_loss: { revenue, cogs, gross_profit: grossProfit, operating_expenses: opex, net_profit: netProfit },
+    pl_detail: {
+      revenue: detailByTypes(plByAccount, DIRECT_PL_INCOME_TYPES, true),
+      cogs: detailByTypes(plByAccount, DIRECT_PL_COGS_TYPES, false),
+      opex: detailByTypes(plByAccount, DIRECT_PL_OPEX_TYPES, false),
+    },
     balance_sheet: {
       as_of: dateTo, assets, liabilities,
       equity: equity + netProfit,
