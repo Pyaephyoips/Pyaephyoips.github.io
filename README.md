@@ -18,24 +18,31 @@ A static GitHub Pages site for Skybridge Business Solution.
 
 ## Password manager
 
-`password-manager.html` is a self-contained, open-source password manager
-that runs entirely in the browser:
+`password-manager.html` is an open-source password manager with multi-user
+accounts and cloud sync, backed by your own Firebase project (Authentication
++ Firestore) — see [`password-manager/README.md`](password-manager/README.md)
+for the one-time Firebase setup (create a project, apply the Firestore
+security rules, paste your config into the page).
 
-- **Zero-knowledge encryption.** Your master password never leaves the
-  browser and is never stored anywhere. It is run through PBKDF2-SHA256
-  (300,000 iterations) to derive an AES-256-GCM key, which encrypts your
-  vault before it is written to `localStorage`.
-- **No backend, no network calls.** Everything (vault storage, password
-  generation, encryption/decryption) happens client-side. Nothing is ever
-  sent to a server, so this works as a static page with no configuration.
+- **Zero-knowledge encryption, even in the cloud.** Your master password is
+  stretched locally (PBKDF2-SHA256, 600,000 iterations, salted with your
+  email) into two independent secrets: one Firebase uses to authenticate
+  you, and a separate AES-256-GCM key that only ever exists in your browser
+  and encrypts/decrypts your vault. The database stores nothing but
+  ciphertext — never your master password, never a plaintext entry.
+- **Accounts, not just one local vault.** Sign up with an email + master
+  password; your encrypted vault follows you across any browser/device you
+  log in from.
 - **Password generator** using `crypto.getRandomValues` (rejection sampling,
   no modulo bias), a strength estimator, per-entry search, show/hide and
   copy-to-clipboard (auto-cleared after 20 seconds), auto-lock after 5
-  minutes of inactivity, master password change, and encrypted
-  export/import for backups or moving between browsers.
-- **No recovery.** Forgetting the master password means the vault cannot be
-  decrypted by anyone, including the site owner — there is no reset flow by
-  design.
+  minutes of inactivity (re-prompts for your master password without
+  signing you out), master password change, encrypted local backup
+  export/import, and account deletion.
+- **No recovery.** Forgetting the master password means the vault can never
+  be decrypted again, by you, the site owner, or Firebase — there is
+  deliberately no "forgot password" reset, since one would mean the server
+  could get you back in without your master password.
 
 This is an educational/self-hosted tool, not an independently audited
 security product. For high-value credentials, consider a maintained, audited
