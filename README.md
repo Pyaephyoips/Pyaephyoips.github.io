@@ -8,12 +8,38 @@ A static GitHub Pages site for Skybridge Business Solution.
 - `style.css` contains the complete responsive design.
 - `assets/skybridge-erp-hero.png` is the generated hero image.
 - `pos.html` / `cashflow.html` are local-only demo tools (browser storage, no backend).
+- `password-manager.html` is an open-source, client-side password manager (see below).
 - `executive-dashboard.html`, `sales-dashboard.html`, `financial-dashboard.html`,
   `inventory-dashboard.html`, `purchase-dashboard.html`, `manufacturing-dashboard.html`
   are Odoo-backed ERP dashboards (see below).
 - `odoo-course.html` is a full 8-week instructor-ready curriculum for teaching
   Odoo Sale, CRM, Accounting, and Project — session plans, labs, a capstone
   project, and grading/certification guidance.
+
+## Password manager
+
+`password-manager.html` is a self-contained, open-source password manager
+that runs entirely in the browser:
+
+- **Zero-knowledge encryption.** Your master password never leaves the
+  browser and is never stored anywhere. It is run through PBKDF2-SHA256
+  (300,000 iterations) to derive an AES-256-GCM key, which encrypts your
+  vault before it is written to `localStorage`.
+- **No backend, no network calls.** Everything (vault storage, password
+  generation, encryption/decryption) happens client-side. Nothing is ever
+  sent to a server, so this works as a static page with no configuration.
+- **Password generator** using `crypto.getRandomValues` (rejection sampling,
+  no modulo bias), a strength estimator, per-entry search, show/hide and
+  copy-to-clipboard (auto-cleared after 20 seconds), auto-lock after 5
+  minutes of inactivity, master password change, and encrypted
+  export/import for backups or moving between browsers.
+- **No recovery.** Forgetting the master password means the vault cannot be
+  decrypted by anyone, including the site owner — there is no reset flow by
+  design.
+
+This is an educational/self-hosted tool, not an independently audited
+security product. For high-value credentials, consider a maintained, audited
+password manager instead.
 
 ## Customize
 
