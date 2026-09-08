@@ -9,6 +9,8 @@ A static GitHub Pages site for Skybridge Business Solution.
 - `assets/skybridge-erp-hero.png` is the generated hero image.
 - `pos.html` / `cashflow.html` are local-only demo tools (browser storage, no backend).
 - `password-manager.html` is an open-source, client-side password manager (see below).
+- `ai-content-writer.html` / `ai-voice-assistant.html` are client-side AI tools
+  backed by your own Google AI (Gemini) API key (see below).
 - `executive-dashboard.html`, `sales-dashboard.html`, `financial-dashboard.html`,
   `inventory-dashboard.html`, `purchase-dashboard.html`, `manufacturing-dashboard.html`
   are Odoo-backed ERP dashboards (see below).
@@ -47,6 +49,32 @@ security rules, paste your config into the page).
 This is an educational/self-hosted tool, not an independently audited
 security product. For high-value credentials, consider a maintained, audited
 password manager instead.
+
+## AI Content Writer & AI Voice Assistant
+
+`ai-content-writer.html` and `ai-voice-assistant.html` are static, client-side
+tools powered by Google AI's Gemini API. Like the Odoo dashboards' direct
+connection mode, each visitor pastes their own free Gemini API key (get one
+at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)); the key
+is saved only in that browser's local storage and calls go straight from the
+browser to Google's `generativelanguage.googleapis.com` API — never through
+this site or its repo. Both pages share the same saved key/model, so
+connecting once covers both tools.
+
+- **AI Content Writer** — pick a content type (blog post, social caption,
+  product description, marketing email, ad copy, press release, landing page
+  copy), tone, and length, describe the topic, and generate a draft with
+  copy-to-clipboard and regenerate.
+- **AI Voice Assistant** — a conversational voice chat: tap the microphone
+  (Web Speech API, Chrome/Edge) or type a message, get a reply shown in the
+  chat log and read aloud (`speechSynthesis`), with a toggle to mute spoken
+  replies and a button to clear the conversation. Browsers without
+  `SpeechRecognition` support fall back to the text box.
+
+Because this uses your own API key with no backend, usage is billed to your
+own Google AI account (Gemini has a free tier) and the key is visible in your
+browser's network requests to Google — treat it like any client-side API key
+and rotate it if you suspect it leaked.
 
 ## Customize
 
