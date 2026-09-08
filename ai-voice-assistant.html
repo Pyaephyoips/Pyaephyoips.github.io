@@ -77,6 +77,11 @@
 
     .toggle-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--muted); }
     .toggle-row input { width: auto; }
+
+    .voice-settings { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; margin-bottom: 0.9rem; }
+    .voice-settings select { width: auto; min-width: 180px; }
+    .slider-field { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--muted); }
+    .slider-field input[type="range"] { width: 100px; }
   </style>
 </head>
 <body>
@@ -125,6 +130,13 @@
           <button class="btn btn-ghost" id="changeKeyBtn">⚙ change key / model</button>
         </div>
       </div>
+      <div class="voice-settings">
+        <label for="voiceSelect" style="margin:0">Voice</label>
+        <select id="voiceSelect"></select>
+        <span class="slider-field">pitch <input type="range" id="pitchRange" min="0" max="2" step="0.1" value="1.2"></span>
+        <span class="slider-field">rate <input type="range" id="rateRange" min="0.5" max="1.5" step="0.1" value="1"></span>
+        <button class="btn btn-ghost" id="previewVoiceBtn" style="padding:0.35rem 0.8rem;font-size:0.78rem">▶ preview</button>
+      </div>
       <div class="chat-log" id="chatLog">
         <p class="empty-hint" id="emptyHint">Tap the microphone and start talking, or type a message below.</p>
       </div>
@@ -145,6 +157,14 @@
     const MODEL_STORAGE = 'google_ai_model';
     const DEFAULT_MODEL = 'gemini-2.5-flash';
     const SYSTEM_INSTRUCTION = 'You are a helpful, friendly voice assistant. Keep replies conversational and concise (usually 1-4 sentences) since they will be read aloud, unless the user asks for detail.';
+
+    const VOICE_STORAGE = 'voice_assistant_voice_name';
+    const PITCH_STORAGE = 'voice_assistant_pitch';
+    const RATE_STORAGE = 'voice_assistant_rate';
+    // Name fragments that tend to indicate a female-sounding voice across
+    // Chrome/Edge/Safari voice lists — used only to pick a pleasant default;
+    // the dropdown lets you pick any installed voice instead.
+    const FEMALE_NAME_HINTS = ['female', 'woman', 'zira', 'samantha', 'victoria', 'susan', 'karen', 'moira', 'tessa', 'fiona', 'ava', 'allison', 'salli', 'joanna', 'kendra', 'kimberly', 'ivy', 'aria', 'jenny', 'sara', 'emma', 'olivia'];
 
     const setupCard = document.getElementById('setupCard');
     const chatCard = document.getElementById('chatCard');
@@ -241,13 +261,66 @@
       return text;
     }
 
+    // ── Voice selection (Web Speech API TTS) ─────────────────────────────
+    let voices = [];
+    const voiceSelect = document.getElementById('voiceSelect');
+    const pitchRange = document.getElementById('pitchRange');
+    const rateRange = document.getElementById('rateRange');
+
+    function pickDefaultVoice(list) {
+      const saved = localStorage.getItem(VOICE_STORAGE);
+      if (saved && list.some(v => v.name === saved)) return saved;
+      const female = list.find(v => FEMALE_NAME_HINTS.some(hint => v.name.toLowerCase().includes(hint)));
+      if (female) return female.name;
+      const englishFemale = list.find(v => /en[-_]/i.test(v.lang) && FEMALE_NAME_HINTS.some(hint => v.name.toLowerCase().includes(hint)));
+      if (englishFemale) return englishFemale.name;
+      const anyEnglish = list.find(v => /en[-_]/i.test(v.lang));
+      return anyEnglish ? anyEnglish.name : (list[0] ? list[0].name : '');
+    }
+
+    function populateVoices() {
+      if (!('speechSynthesis' in window)) return;
+      voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      const defaultName = pickDefaultVoice(voices);
+      voiceSelect.innerHTML = voices.map(v =>
+        `<option value="${v.name}" ${v.name === defaultName ? 'selected' : ''}>${v.name} (${v.lang})</option>`
+      ).join('');
+      localStorage.setItem(VOICE_STORAGE, defaultName);
+    }
+
+    if ('speechSynthesis' in window) {
+      populateVoices();
+      window.speechSynthesis.onvoiceschanged = populateVoices;
+    } else {
+      voiceSelect.disabled = true;
+    }
+
+    voiceSelect.addEventListener('change', () => {
+      localStorage.setItem(VOICE_STORAGE, voiceSelect.value);
+    });
+
+    const savedPitch = localStorage.getItem(PITCH_STORAGE);
+    const savedRate = localStorage.getItem(RATE_STORAGE);
+    if (savedPitch) pitchRange.value = savedPitch;
+    if (savedRate) rateRange.value = savedRate;
+    pitchRange.addEventListener('input', () => localStorage.setItem(PITCH_STORAGE, pitchRange.value));
+    rateRange.addEventListener('input', () => localStorage.setItem(RATE_STORAGE, rateRange.value));
+
     function speak(text) {
-      if (!document.getElementById('speakToggle').checked) return;
       if (!('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
       const utter = new SpeechSynthesisUtterance(text);
+      const selected = voices.find(v => v.name === voiceSelect.value);
+      if (selected) utter.voice = selected;
+      utter.pitch = parseFloat(pitchRange.value) || 1;
+      utter.rate = parseFloat(rateRange.value) || 1;
       window.speechSynthesis.speak(utter);
     }
+
+    document.getElementById('previewVoiceBtn').addEventListener('click', () => {
+      speak("Hi, I'm your AI voice assistant. How can I help you today?");
+    });
 
     async function sendMessage(text) {
       text = text.trim();
@@ -268,7 +341,7 @@
         pendingBubble.remove();
         addBubble('assistant', reply);
         history.push({ role: 'model', parts: [{ text: reply }] });
-        speak(reply);
+        if (document.getElementById('speakToggle').checked) speak(reply);
       } catch (err) {
         pendingBubble.remove();
         history.pop(); // don't keep an unanswered turn in context

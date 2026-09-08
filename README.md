@@ -68,7 +68,9 @@ connecting once covers both tools.
 - **AI Voice Assistant** — a conversational voice chat: tap the microphone
   (Web Speech API, Chrome/Edge) or type a message, get a reply shown in the
   chat log and read aloud (`speechSynthesis`), with a toggle to mute spoken
-  replies and a button to clear the conversation. Browsers without
+  replies and a button to clear the conversation. A voice picker defaults to
+  a female-sounding system voice with adjustable pitch/rate and a preview
+  button — pick any installed voice instead if you prefer. Browsers without
   `SpeechRecognition` support fall back to the text box.
 
 Because this uses your own API key with no backend, usage is billed to your
