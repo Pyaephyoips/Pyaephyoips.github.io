@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Free browser-based AI voice assistant. Speak or type, get spoken and written replies. Bring your own Google AI (Gemini) API key.">
+  <title>AI Voice Assistant</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+      --accent: #8b5cf6; --accent2: #a78bfa; --text: #f1f5f9; --muted: #94a3b8;
+      --green: #22c55e; --red: #ef4444; --border: #334155;
+    }
+    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent2); }
+    .nav-link { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    .nav-link:hover { color: var(--accent2); }
+    .main { max-width: 760px; margin: 0 auto; padding: 1.5rem; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem; }
+    .card p.hint { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
+
+    label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; font-weight: 600; }
+    input, select, textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.55rem 0.7rem; border-radius: 8px; font-size: 0.9rem;
+      font-family: inherit;
+    }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
+    .field { margin-bottom: 0.9rem; }
+    .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.9rem; }
+
+    .btn { padding: 0.6rem 1.3rem; background: var(--accent); border: none; border-radius: 8px; color: #fff; font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+    .btn:hover { opacity: .88; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent2); opacity: 1; }
+    .btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
+
+    .setup-badge { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--green); }
+    .setup-badge.off { color: var(--muted); }
+
+    #chatCard { display: none; }
+    #chatCard.show { display: block; }
+
+    .chat-log {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem; height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.6rem;
+    }
+    .bubble { max-width: 82%; padding: 0.55rem 0.8rem; border-radius: 12px; font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap; }
+    .bubble.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+    .bubble.assistant { align-self: flex-start; background: var(--bg); border: 1px solid var(--border); border-bottom-left-radius: 3px; }
+    .bubble.pending { color: var(--muted); font-style: italic; }
+    .empty-hint { color: var(--muted); font-size: 0.85rem; text-align: center; margin: auto; }
+
+    .mic-row { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.9rem; }
+    .mic-btn {
+      width: 52px; height: 52px; border-radius: 50%; border: none; background: var(--accent);
+      color: #fff; font-size: 1.3rem; cursor: pointer; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+      transition: transform .15s, background .15s;
+    }
+    .mic-btn:hover { transform: scale(1.05); }
+    .mic-btn.listening { background: var(--red); animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%,100%{ box-shadow: 0 0 0 0 rgba(239,68,68,.5);} 50%{ box-shadow: 0 0 0 10px rgba(239,68,68,0);} }
+    .text-input-row { flex: 1; display: flex; gap: 0.5rem; }
+    #textInput { flex: 1; }
+
+    .status-line { font-size: 0.8rem; color: var(--muted); margin-top: 0.5rem; min-height: 1.2em; }
+    .error-box { background: rgba(239,68,68,.1); border: 1px solid var(--red); color: #fca5a5; border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.85rem; margin-top: 0.75rem; display: none; }
+    .error-box.show { display: block; }
+
+    .toggle-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--muted); }
+    .toggle-row input { width: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎙️ AI Voice Assistant</h1>
+    <a class="nav-link" href="index.html">&larr; back to site</a>
+  </header>
+
+  <main class="main">
+    <div class="card" id="setupCard">
+      <h2>Connect your Google AI (Gemini) API key</h2>
+      <p class="hint">
+        This is a fully client-side tool &mdash; there is no backend. Your API key is
+        saved only in <em>this browser's</em> local storage and is sent directly from
+        your browser to Google's Generative Language API. It is never seen by, or
+        stored on, this website. Get a free key at
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style="color:var(--accent2)">aistudio.google.com/apikey</a>.
+      </p>
+      <div class="field-row">
+        <div class="field">
+          <label for="apiKey">Gemini API key</label>
+          <input type="password" id="apiKey" placeholder="AIza...">
+        </div>
+        <div class="field">
+          <label for="modelId">Model</label>
+          <input type="text" id="modelId" list="modelList" placeholder="gemini-2.5-flash">
+          <datalist id="modelList">
+            <option value="gemini-2.5-flash">
+            <option value="gemini-2.5-pro">
+            <option value="gemini-2.0-flash">
+          </datalist>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="saveKeyBtn">Save & continue</button>
+        <span class="setup-badge off" id="setupBadge">not connected</span>
+      </div>
+    </div>
+
+    <div class="card" id="chatCard">
+      <div class="btn-row" style="justify-content:space-between; margin-top:0">
+        <h2 style="margin:0">Conversation</h2>
+        <div class="btn-row" style="margin-top:0">
+          <label class="toggle-row"><input type="checkbox" id="speakToggle" checked> speak replies</label>
+          <button class="btn btn-ghost" id="clearBtn">clear chat</button>
+          <button class="btn btn-ghost" id="changeKeyBtn">⚙ change key / model</button>
+        </div>
+      </div>
+      <div class="chat-log" id="chatLog">
+        <p class="empty-hint" id="emptyHint">Tap the microphone and start talking, or type a message below.</p>
+      </div>
+      <div class="mic-row">
+        <button class="mic-btn" id="micBtn" title="Start listening">🎤</button>
+        <div class="text-input-row">
+          <input type="text" id="textInput" placeholder="Type instead of speaking...">
+          <button class="btn" id="sendBtn">Send</button>
+        </div>
+      </div>
+      <div class="status-line" id="statusLine"></div>
+      <div class="error-box" id="errorBox"></div>
+    </div>
+  </main>
+
+  <script>
+    const KEY_STORAGE = 'google_ai_api_key';
+    const MODEL_STORAGE = 'google_ai_model';
+    const DEFAULT_MODEL = 'gemini-2.5-flash';
+    const SYSTEM_INSTRUCTION = 'You are a helpful, friendly voice assistant. Keep replies conversational and concise (usually 1-4 sentences) since they will be read aloud, unless the user asks for detail.';
+
+    const setupCard = document.getElementById('setupCard');
+    const chatCard = document.getElementById('chatCard');
+    const chatLog = document.getElementById('chatLog');
+    const emptyHint = document.getElementById('emptyHint');
+    const errorBox = document.getElementById('errorBox');
+    const statusLine = document.getElementById('statusLine');
+    const micBtn = document.getElementById('micBtn');
+
+    let history = []; // { role: 'user'|'model', parts: [{text}] }
+
+    function getConfig() {
+      return {
+        key: localStorage.getItem(KEY_STORAGE) || '',
+        model: localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL,
+      };
+    }
+
+    function showChat() {
+      setupCard.style.display = 'none';
+      chatCard.classList.add('show');
+    }
+    function showSetup() {
+      const { key, model } = getConfig();
+      document.getElementById('apiKey').value = key;
+      document.getElementById('modelId').value = model || DEFAULT_MODEL;
+      setupCard.style.display = 'block';
+      chatCard.classList.remove('show');
+    }
+
+    document.getElementById('saveKeyBtn').addEventListener('click', () => {
+      const key = document.getElementById('apiKey').value.trim();
+      const model = document.getElementById('modelId').value.trim() || DEFAULT_MODEL;
+      if (!key) {
+        document.getElementById('setupBadge').textContent = 'please paste an API key';
+        return;
+      }
+      localStorage.setItem(KEY_STORAGE, key);
+      localStorage.setItem(MODEL_STORAGE, model);
+      showChat();
+    });
+    document.getElementById('changeKeyBtn').addEventListener('click', showSetup);
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.classList.add('show');
+    }
+    function clearError() {
+      errorBox.textContent = '';
+      errorBox.classList.remove('show');
+    }
+
+    function addBubble(role, text, pending) {
+      if (emptyHint) emptyHint.remove();
+      const div = document.createElement('div');
+      div.className = 'bubble ' + (role === 'user' ? 'user' : 'assistant') + (pending ? ' pending' : '');
+      div.textContent = text;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+      return div;
+    }
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      history = [];
+      chatLog.innerHTML = '';
+      const p = document.createElement('p');
+      p.className = 'empty-hint';
+      p.id = 'emptyHint';
+      p.textContent = 'Tap the microphone and start talking, or type a message below.';
+      chatLog.appendChild(p);
+      clearError();
+      window.speechSynthesis && window.speechSynthesis.cancel();
+    });
+
+    async function callGemini() {
+      const { key, model } = getConfig();
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: history,
+          systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+          generationConfig: { temperature: 0.8, maxOutputTokens: 1024 },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data.error && data.error.message) || `Request failed (${res.status})`);
+      }
+      const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+      const text = parts ? parts.map(p => p.text || '').join('') : '';
+      if (!text) throw new Error('No reply was returned. It may have been blocked by safety filters — try rephrasing.');
+      return text;
+    }
+
+    function speak(text) {
+      if (!document.getElementById('speakToggle').checked) return;
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      window.speechSynthesis.speak(utter);
+    }
+
+    async function sendMessage(text) {
+      text = text.trim();
+      if (!text) return;
+      clearError();
+      const { key } = getConfig();
+      if (!key) { showSetup(); return; }
+
+      addBubble('user', text);
+      history.push({ role: 'user', parts: [{ text }] });
+
+      const pendingBubble = addBubble('assistant', 'thinking…', true);
+      micBtn.disabled = true;
+      document.getElementById('sendBtn').disabled = true;
+
+      try {
+        const reply = await callGemini();
+        pendingBubble.remove();
+        addBubble('assistant', reply);
+        history.push({ role: 'model', parts: [{ text: reply }] });
+        speak(reply);
+      } catch (err) {
+        pendingBubble.remove();
+        history.pop(); // don't keep an unanswered turn in context
+        showError(err.message || String(err));
+      } finally {
+        micBtn.disabled = false;
+        document.getElementById('sendBtn').disabled = false;
+      }
+    }
+
+    document.getElementById('sendBtn').addEventListener('click', () => {
+      const input = document.getElementById('textInput');
+      sendMessage(input.value);
+      input.value = '';
+    });
+    document.getElementById('textInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('sendBtn').click();
+      }
+    });
+
+    // ── Speech recognition (Web Speech API) ──────────────────────────────
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let listening = false;
+
+    if (SpeechRecognitionCtor) {
+      recognition = new SpeechRecognitionCtor();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.addEventListener('start', () => {
+        listening = true;
+        micBtn.classList.add('listening');
+        statusLine.textContent = 'Listening…';
+      });
+      recognition.addEventListener('end', () => {
+        listening = false;
+        micBtn.classList.remove('listening');
+        statusLine.textContent = '';
+      });
+      recognition.addEventListener('error', (e) => {
+        statusLine.textContent = '';
+        if (e.error !== 'no-speech' && e.error !== 'aborted') {
+          showError('Speech recognition error: ' + e.error);
+        }
+      });
+      recognition.addEventListener('result', (e) => {
+        let interim = '';
+        let final = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const transcript = e.results[i][0].transcript;
+          if (e.results[i].isFinal) final += transcript;
+          else interim += transcript;
+        }
+        if (interim) statusLine.textContent = 'Listening: “' + interim + '”';
+        if (final) {
+          window.speechSynthesis && window.speechSynthesis.cancel();
+          sendMessage(final);
+        }
+      });
+
+      micBtn.addEventListener('click', () => {
+        if (listening) {
+          recognition.stop();
+        } else {
+          clearError();
+          try { recognition.start(); } catch (err) { /* already started */ }
+        }
+      });
+    } else {
+      micBtn.disabled = true;
+      micBtn.title = 'Speech recognition is not supported in this browser — try Chrome or Edge, or use the text box.';
+      statusLine.textContent = 'Voice input isn\'t supported in this browser. Try Chrome or Edge, or type your message below.';
+    }
+
+    // Init
+    const initial = getConfig();
+    if (initial.key) showChat(); else showSetup();
+  </script>
+</body>
+</html>

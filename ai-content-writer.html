@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Free AI content writer for blog posts, social captions, product descriptions, marketing emails, and ad copy. Bring your own Google AI (Gemini) API key.">
+  <title>AI Content Writer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+      --accent: #8b5cf6; --accent2: #a78bfa; --text: #f1f5f9; --muted: #94a3b8;
+      --green: #22c55e; --red: #ef4444; --border: #334155;
+    }
+    body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent2); }
+    .nav-link { color: var(--muted); text-decoration: none; font-size: 0.85rem; }
+    .nav-link:hover { color: var(--accent2); }
+    .main { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+    .card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem; }
+    .card p.hint { font-size: 0.82rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
+
+    label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.3rem; font-weight: 600; }
+    input, select, textarea {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 0.55rem 0.7rem; border-radius: 8px; font-size: 0.9rem;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 90px; }
+    .field { margin-bottom: 0.9rem; }
+    .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.9rem; }
+
+    .btn { padding: 0.6rem 1.3rem; background: var(--accent); border: none; border-radius: 8px; color: #fff; font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+    .btn:hover { opacity: .88; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent2); opacity: 1; }
+    .btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-top: 0.5rem; }
+
+    .setup-badge { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--green); }
+    .setup-badge.off { color: var(--muted); }
+
+    #outputWrap { display: none; }
+    #outputWrap.show { display: block; }
+    .output-box {
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem; white-space: pre-wrap; font-size: 0.92rem; line-height: 1.6; min-height: 120px;
+    }
+    .output-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+    .output-meta span { font-size: 0.78rem; color: var(--muted); }
+
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent2); border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-box { background: rgba(239,68,68,.1); border: 1px solid var(--red); color: #fca5a5; border-radius: 8px; padding: 0.7rem 0.9rem; font-size: 0.85rem; margin-top: 0.75rem; display: none; }
+    .error-box.show { display: block; }
+
+    .toast { position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%); background: var(--surface2); border: 1px solid var(--accent); color: var(--text); padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem; opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>✍️ AI Content Writer</h1>
+    <a class="nav-link" href="index.html">&larr; back to site</a>
+  </header>
+
+  <main class="main">
+    <div class="card" id="setupCard">
+      <h2>Connect your Google AI (Gemini) API key</h2>
+      <p class="hint">
+        This is a fully client-side tool &mdash; there is no backend. Your API key is
+        saved only in <em>this browser's</em> local storage and is sent directly from
+        your browser to Google's Generative Language API. It is never seen by, or
+        stored on, this website. Get a free key at
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" style="color:var(--accent2)">aistudio.google.com/apikey</a>.
+      </p>
+      <div class="field-row">
+        <div class="field">
+          <label for="apiKey">Gemini API key</label>
+          <input type="password" id="apiKey" placeholder="AIza...">
+        </div>
+        <div class="field">
+          <label for="modelId">Model</label>
+          <input type="text" id="modelId" list="modelList" placeholder="gemini-2.5-flash">
+          <datalist id="modelList">
+            <option value="gemini-2.5-flash">
+            <option value="gemini-2.5-pro">
+            <option value="gemini-2.0-flash">
+          </datalist>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="saveKeyBtn">Save & continue</button>
+        <span class="setup-badge off" id="setupBadge">not connected</span>
+      </div>
+    </div>
+
+    <div class="card" id="toolCard" style="display:none">
+      <h2>Draft your content</h2>
+      <div class="field-row">
+        <div class="field">
+          <label for="contentType">Content type</label>
+          <select id="contentType">
+            <option value="blog post">Blog post</option>
+            <option value="social media caption">Social media caption</option>
+            <option value="product description">Product description</option>
+            <option value="marketing email">Marketing email</option>
+            <option value="ad copy">Ad copy</option>
+            <option value="press release">Press release</option>
+            <option value="website landing page copy">Website landing page copy</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="tone">Tone</label>
+          <select id="tone">
+            <option value="professional">Professional</option>
+            <option value="friendly">Friendly</option>
+            <option value="persuasive">Persuasive</option>
+            <option value="casual">Casual</option>
+            <option value="formal">Formal</option>
+            <option value="enthusiastic">Enthusiastic</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="length">Length</label>
+          <select id="length">
+            <option value="short (roughly 75-125 words)">Short</option>
+            <option value="medium (roughly 200-350 words)" selected>Medium</option>
+            <option value="long (roughly 500-700 words)">Long</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="topic">Topic / key points (what should this be about?)</label>
+        <textarea id="topic" placeholder="e.g. Announcing our new cloud backup service for small businesses in Myanmar, emphasizing reliability and affordable pricing."></textarea>
+      </div>
+      <div class="field">
+        <label for="audience">Target audience (optional)</label>
+        <input type="text" id="audience" placeholder="e.g. small business owners, IT managers">
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="generateBtn">Generate</button>
+        <button class="btn btn-ghost" id="changeKeyBtn">⚙ change key / model</button>
+        <span id="genStatus"></span>
+      </div>
+      <div class="error-box" id="errorBox"></div>
+    </div>
+
+    <div class="card" id="outputWrap">
+      <div class="output-meta">
+        <h2 style="margin:0">Draft</h2>
+        <span id="wordCount"></span>
+      </div>
+      <div class="output-box" id="outputBox"></div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="copyBtn">📋 copy</button>
+        <button class="btn btn-ghost" id="regenBtn">↻ regenerate</button>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const KEY_STORAGE = 'google_ai_api_key';
+    const MODEL_STORAGE = 'google_ai_model';
+    const DEFAULT_MODEL = 'gemini-2.5-flash';
+
+    const setupCard = document.getElementById('setupCard');
+    const toolCard = document.getElementById('toolCard');
+    const outputWrap = document.getElementById('outputWrap');
+    const errorBox = document.getElementById('errorBox');
+
+    function getConfig() {
+      const key = localStorage.getItem(KEY_STORAGE) || '';
+      const model = localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL;
+      return { key, model };
+    }
+
+    function showTool() {
+      setupCard.style.display = 'none';
+      toolCard.style.display = 'block';
+    }
+
+    function showSetup() {
+      const { key, model } = getConfig();
+      document.getElementById('apiKey').value = key;
+      document.getElementById('modelId').value = model || DEFAULT_MODEL;
+      setupCard.style.display = 'block';
+      toolCard.style.display = 'none';
+      outputWrap.classList.remove('show');
+    }
+
+    document.getElementById('saveKeyBtn').addEventListener('click', () => {
+      const key = document.getElementById('apiKey').value.trim();
+      const model = document.getElementById('modelId').value.trim() || DEFAULT_MODEL;
+      if (!key) {
+        document.getElementById('setupBadge').textContent = 'please paste an API key';
+        return;
+      }
+      localStorage.setItem(KEY_STORAGE, key);
+      localStorage.setItem(MODEL_STORAGE, model);
+      showTool();
+    });
+
+    document.getElementById('changeKeyBtn').addEventListener('click', showSetup);
+
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1800);
+    }
+
+    function showError(msg) {
+      errorBox.textContent = msg;
+      errorBox.classList.add('show');
+    }
+    function clearError() {
+      errorBox.textContent = '';
+      errorBox.classList.remove('show');
+    }
+
+    async function callGemini(prompt) {
+      const { key, model } = getConfig();
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.9, maxOutputTokens: 2048 },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data.error && data.error.message) || `Request failed (${res.status})`);
+      }
+      const parts = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts;
+      const text = parts ? parts.map(p => p.text || '').join('') : '';
+      if (!text) throw new Error('No content was returned. The response may have been blocked by safety filters — try rephrasing.');
+      return text;
+    }
+
+    function buildPrompt() {
+      const contentType = document.getElementById('contentType').value;
+      const tone = document.getElementById('tone').value;
+      const length = document.getElementById('length').value;
+      const topic = document.getElementById('topic').value.trim();
+      const audience = document.getElementById('audience').value.trim();
+      if (!topic) throw new Error('Please describe what the content should be about.');
+      let prompt = `Write a ${contentType} with a ${tone} tone, ${length}.\n\nTopic / key points:\n${topic}`;
+      if (audience) prompt += `\n\nTarget audience: ${audience}`;
+      prompt += `\n\nReturn only the finished ${contentType} text, with no preamble, notes, or markdown headers.`;
+      return prompt;
+    }
+
+    async function generate() {
+      clearError();
+      const { key } = getConfig();
+      if (!key) { showSetup(); return; }
+      let prompt;
+      try {
+        prompt = buildPrompt();
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+      const btn = document.getElementById('generateBtn');
+      const regenBtn = document.getElementById('regenBtn');
+      const status = document.getElementById('genStatus');
+      btn.disabled = true;
+      if (regenBtn) regenBtn.disabled = true;
+      status.innerHTML = '<span class="spinner"></span>';
+      try {
+        const text = await callGemini(prompt);
+        document.getElementById('outputBox').textContent = text;
+        const words = text.trim().split(/\s+/).filter(Boolean).length;
+        document.getElementById('wordCount').textContent = `${words} words`;
+        outputWrap.classList.add('show');
+        outputWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (err) {
+        showError(err.message || String(err));
+      } finally {
+        btn.disabled = false;
+        if (regenBtn) regenBtn.disabled = false;
+        status.textContent = '';
+      }
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', generate);
+    document.getElementById('regenBtn').addEventListener('click', generate);
+
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      const text = document.getElementById('outputBox').textContent;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => toast('Copied to clipboard'));
+    });
+
+    // Init
+    const initial = getConfig();
+    if (initial.key) showTool(); else showSetup();
+  </script>
+</body>
+</html>
