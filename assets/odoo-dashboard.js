@@ -171,13 +171,18 @@ function showState(containerId, kind, message) {
   }
 }
 
-function renderSetupNote(containerId) {
+// editing=true is used by toggleOdooSettings() to reopen this form on
+// demand for an already-connected dashboard (to change the URL, database,
+// username, or API key) — as opposed to the initial not-yet-configured
+// state, where load() calls this the same way but with no way to dismiss
+// it (there's nothing loaded yet to go back to).
+function renderSetupNote(containerId, opts = {}) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.style.display = 'block';
   const cfg = getDirectConfig() || {};
   el.innerHTML = `
-    <strong>⚙️ Connect this dashboard to Odoo</strong>
+    <strong>⚙️ ${opts.editing ? 'Odoo Connection Settings' : 'Connect this dashboard to Odoo'}</strong>
     <p style="margin:0.5rem 0">
       Enter your Odoo connection details below. They're saved only in
       <em>this browser's</em> local storage — never written into the site's
@@ -191,6 +196,7 @@ function renderSetupNote(containerId) {
       <div style="display:flex;gap:0.5rem">
         <button class="btn-connect" onclick="saveDirectConfigFromForm()">Save &amp; Connect</button>
         ${cfg.url ? `<button class="btn-disconnect" onclick="clearDirectConfig();location.reload()">Disconnect</button>` : ''}
+        ${opts.editing ? `<button class="btn-disconnect" onclick="hideOdooSettings()">Cancel</button>` : ''}
       </div>
     </div>
     <p style="margin-top:0.75rem;font-size:0.78rem">
@@ -200,6 +206,31 @@ function renderSetupNote(containerId) {
       <a href="https://github.com/Pyaephyoips/Pyaephyoips.github.io/tree/main/odoo-proxy" target="_blank" rel="noreferrer">Cloudflare Worker proxy</a>
       instead — it avoids the CORS requirement entirely.
     </p>`;
+}
+
+// Shared "⚙ Odoo Settings" button handler (wired into every dashboard's
+// .controls row) — lets you change the URL, database, username, or API
+// key for an already-connected dashboard, without disconnecting first.
+// No-ops when the Cloudflare proxy is configured instead of direct mode,
+// since there's nothing here to edit (the proxy's own URL/token live in
+// assets/odoo-dashboard.js, not browser storage).
+function toggleOdooSettings() {
+  if (odooProxyConfigured()) {
+    alert('This dashboard connects through the Cloudflare Worker proxy, configured in assets/odoo-dashboard.js — there\'s nothing to change here in the browser.');
+    return;
+  }
+  const el = document.getElementById('setupNote');
+  if (!el) return;
+  if (el.style.display === 'block') {
+    hideOdooSettings();
+  } else {
+    renderSetupNote('setupNote', { editing: true });
+  }
+}
+
+function hideOdooSettings() {
+  const el = document.getElementById('setupNote');
+  if (el) el.style.display = 'none';
 }
 
 function saveDirectConfigFromForm() {
