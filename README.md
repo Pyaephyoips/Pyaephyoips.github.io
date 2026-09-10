@@ -104,6 +104,14 @@ presets (3/6/12/24) plus a custom From/To date picker; Balance Sheet & P&L
 offers quarter/year/last-12-months presets plus the same custom picker.
 Picking a custom range overrides the preset until you pick a preset again.
 
+**Inventory movement:** the Warehouse dashboard's **Movement** tab breaks
+down stock movement into **GRN** (goods received), **GIN** (goods issued),
+**Returned** (either direction), **Scrap**, and **Adjustment** (counted-
+quantity corrections with no transfer) — each with a transaction count,
+total quantity, and monthly trend, plus top received/issued/scrapped
+products. It shares the same month-count/custom-range picker as
+Sales/Purchase/Manufacturing.
+
 **Exporting:** every dashboard has an **⬇ Excel** button, which downloads
 the currently loaded data as a multi-sheet `.xlsx` workbook (one sheet per
 table/section), and a **🖨 PDF** button, which opens the browser's print

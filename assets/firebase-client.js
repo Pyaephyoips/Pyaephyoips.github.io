@@ -31,6 +31,7 @@ const REPORT_FIELD_BY_PATH = {
   '/api/manufacturing': 'manufacturing',
   '/api/accounting': 'accounting',
   '/api/warehouse': 'warehouse',
+  '/api/inventory-movement': 'inventoryMovement',
 };
 
 async function fetchFirestoreReport(path, companyId) {
