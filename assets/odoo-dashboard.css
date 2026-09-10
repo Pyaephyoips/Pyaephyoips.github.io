@@ -188,3 +188,17 @@ td.num, th.num { text-align: right; }
   body { background: #fff; color: #111; }
   .section-card, .kpi, .chart-area { border-color: #ccc; background: #fff; }
 }
+
+/* ── Firebase login gate ── */
+.fb-login-gate {
+  display: none; position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg); align-items: center; justify-content: center; padding: 1.5rem;
+}
+.fb-login-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.5rem; max-width: 340px; width: 100%;
+}
+.fb-login-box h2 { font-size: 1.05rem; color: var(--accent); margin-bottom: 0.5rem; }
+.fb-login-box p { font-size: 0.82rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.5; }
+.fb-login-box .connect-form { max-width: none; }
+.fb-login-box .fb-error { color: var(--red); font-size: 0.8rem; min-height: 1.1em; }

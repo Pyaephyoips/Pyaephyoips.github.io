@@ -17,6 +17,8 @@
     <a href="inventory-dashboard.html">Inventory</a>
     <a href="purchase-dashboard.html">Purchase</a>
     <a href="manufacturing-dashboard.html">Manufacturing</a>
+    <a href="accounting-dashboard.html">Accounting</a>
+    <a href="warehouse-dashboard.html">Warehouse</a>
   </nav>
 </header>
 
@@ -36,7 +38,9 @@
       <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
     </div>
     <div id="companySwitcher"></div>
-    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
+    <button class="btn-refresh" onclick="load(false)">↻ Refresh</button>
   </div>
 
   <div class="tab-btns">
@@ -97,8 +101,14 @@
   <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="reportNote"></p>
 </div>
 
-<script src="assets/odoo-client.js?v=8"></script>
-<script src="assets/odoo-dashboard.js?v=8"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/firebase-client.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=11"></script>
+<script src="assets/odoo-dashboard.js?v=11"></script>
 <script>
 let period = 'year';
 let customRange = null;
@@ -118,7 +128,7 @@ function setPeriod(p, btn) {
   document.getElementById('dateTo').value = '';
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  load();
+  load(false);
 }
 
 function applyCustomRange() {
@@ -127,7 +137,7 @@ function applyCustomRange() {
   if (!from || !to) { alert('Please pick both a start and end date.'); return; }
   customRange = { date_from: from, date_to: to };
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-  load();
+  load(false);
 }
 
 function periodRange(p) {
@@ -144,17 +154,17 @@ function periodRange(p) {
   return { date_from: iso(d), date_to: iso(now) };
 }
 
-async function load() {
-  if (!odooConfigured()) {
+async function load(fromCache = true) {
+  if (!dataSourceAvailable()) {
     renderSetupNote('setupNote');
     showState('stateBanner', null);
     return;
   }
   document.getElementById('setupNote').style.display = 'none';
-  showState('stateBanner', 'loading', 'Loading financial data from Odoo…');
+  showState('stateBanner', 'loading', 'Loading financial data…');
   try {
     const { date_from, date_to } = customRange || periodRange(period);
-    const data = await fetchOdooReport('/api/financials', { date_from, date_to });
+    const data = await fetchReport('/api/financials', { date_from, date_to }, fromCache && period === 'year' && !customRange);
     showState('stateBanner', null);
     lastData = data;
     render(data);
@@ -210,8 +220,45 @@ function render(data) {
   document.getElementById('reportNote').textContent = data.note || '';
 }
 
-load();
-renderCompanySwitcher('companySwitcher');
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  const pl = d.profit_and_loss;
+  const bs = d.balance_sheet;
+  const detail = d.pl_detail || { revenue: [], cogs: [], opex: [] };
+  const acctRows = list => list.map(r => [r.code ? `${r.code} — ${r.account}` : r.account, r.balance]);
+  exportToExcel(exportFilename('financial-dashboard'), [
+    {
+      name: 'P&L Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Revenue', pl.revenue],
+        ['COGS', pl.cogs],
+        ['Gross Profit', pl.gross_profit],
+        ['Operating Expenses', pl.operating_expenses],
+        ['Net Profit', pl.net_profit],
+      ],
+    },
+    { name: 'Revenue by Account', headers: ['Account', 'Amount'], rows: acctRows(detail.revenue) },
+    { name: 'COGS by Account', headers: ['Account', 'Amount'], rows: acctRows(detail.cogs) },
+    { name: 'Opex by Account', headers: ['Account', 'Amount'], rows: acctRows(detail.opex) },
+    {
+      name: 'Balance Sheet',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Assets', bs.assets],
+        ['Liabilities', bs.liabilities],
+        ['Equity', bs.equity],
+        ['Liabilities + Equity', bs.liabilities_and_equity],
+      ],
+    },
+  ]);
+}
+
+requireFirebaseAuth(() => {
+  load();
+  renderCompanySwitcher('companySwitcher');
+});
 </script>
 </body>
 </html>

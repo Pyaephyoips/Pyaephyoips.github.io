@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Warehouse Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>🏬 Warehouse Dashboard</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="executive-dashboard.html">Executive</a>
+    <a href="sales-dashboard.html">Sales</a>
+    <a href="financial-dashboard.html">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html">Manufacturing</a>
+    <a href="accounting-dashboard.html">Accounting</a>
+    <a href="warehouse-dashboard.html" class="active">Warehouse</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)" id="asOfLabel">Live stock-by-warehouse snapshot</span>
+    <div id="companySwitcher"></div>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
+    <button class="btn-refresh" onclick="load(false)">↻ Refresh</button>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="two-col">
+    <div class="section-card">
+      <div class="section-header"><h3>🏬 Stock Value by Warehouse</h3></div>
+      <div id="byWarehouseValue"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header"><h3>📦 Stock Quantity by Warehouse</h3></div>
+      <div id="byWarehouseQty"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-header"><h3>🚚 Transfer Activity (Last 30 Days)</h3></div>
+    <table>
+      <thead><tr><th>Transfer Type</th><th class="num">Count</th></tr></thead>
+      <tbody id="transferBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/firebase-client.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=11"></script>
+<script src="assets/odoo-dashboard.js?v=11"></script>
+<script>
+let lastData = null;
+
+async function load(fromCache = true) {
+  if (!dataSourceAvailable()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading warehouse data…');
+  try {
+    const data = await fetchReport('/api/warehouse', {}, fromCache);
+    showState('stateBanner', null);
+    lastData = data;
+    render(data);
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(data) {
+  document.getElementById('asOfLabel').textContent = `As of ${data.as_of}`;
+
+  const totalValue = data.by_warehouse.reduce((s, w) => s + (w.value || 0), 0);
+  renderKpis('kpiRow', [
+    { label: 'Warehouses', value: fmtInt(data.warehouses.length) },
+    { label: 'Total Stock Value', value: fmtMoney(totalValue), cls: 'pos' },
+    { label: 'Pending Transfers', value: fmtInt(data.pending_transfers), cls: data.pending_transfers > 0 ? 'warn' : '' },
+  ]);
+
+  renderRankBars('byWarehouseValue', data.by_warehouse.map(w => ({ label: w.warehouse, value: w.value })));
+  renderRankBars('byWarehouseQty', data.by_warehouse.map(w => ({ label: w.warehouse, value: w.quantity })));
+
+  renderTable('transferBody', data.transfer_activity_last_30d, r => `
+    <tr>
+      <td>${r.picking_type}</td>
+      <td class="num">${fmtInt(r.count)}</td>
+    </tr>
+  `, 2);
+}
+
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  exportToExcel(exportFilename('warehouse-dashboard'), [
+    {
+      name: 'By Warehouse',
+      headers: ['Warehouse', 'Quantity', 'Value'],
+      rows: d.by_warehouse.map(w => [w.warehouse, w.quantity, w.value]),
+    },
+    {
+      name: 'Transfer Activity',
+      headers: ['Transfer Type', 'Count'],
+      rows: d.transfer_activity_last_30d.map(r => [r.picking_type, r.count]),
+    },
+    {
+      name: 'Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Warehouses', d.warehouses.length],
+        ['Pending Transfers', d.pending_transfers],
+      ],
+    },
+  ]);
+}
+
+requireFirebaseAuth(() => {
+  load();
+  renderCompanySwitcher('companySwitcher');
+});
+</script>
+</body>
+</html>

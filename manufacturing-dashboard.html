@@ -17,6 +17,8 @@
     <a href="inventory-dashboard.html">Inventory</a>
     <a href="purchase-dashboard.html">Purchase</a>
     <a href="manufacturing-dashboard.html" class="active">Manufacturing</a>
+    <a href="accounting-dashboard.html">Accounting</a>
+    <a href="warehouse-dashboard.html">Warehouse</a>
   </nav>
 </header>
 
@@ -37,7 +39,9 @@
       <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
     </div>
     <div id="companySwitcher"></div>
-    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
+    <button class="btn-refresh" onclick="load(false)">↻ Refresh</button>
   </div>
 
   <div class="kpi-row" id="kpiRow"></div>
@@ -59,11 +63,18 @@
   </div>
 </div>
 
-<script src="assets/odoo-client.js?v=7"></script>
-<script src="assets/odoo-dashboard.js?v=7"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/firebase-client.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=11"></script>
+<script src="assets/odoo-dashboard.js?v=11"></script>
 <script>
 let months = 12;
 let customRange = null;
+let lastData = null;
 
 const STATE_LABELS = {
   draft: 'Draft', confirmed: 'Confirmed', progress: 'In Progress',
@@ -77,7 +88,7 @@ function setPeriod(m, btn) {
   document.getElementById('dateTo').value = '';
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  load();
+  load(false);
 }
 
 function applyCustomRange() {
@@ -86,20 +97,21 @@ function applyCustomRange() {
   if (!from || !to) { alert('Please pick both a start and end date.'); return; }
   customRange = { date_from: from, date_to: to };
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-  load();
+  load(false);
 }
 
-async function load() {
-  if (!odooConfigured()) {
+async function load(fromCache = true) {
+  if (!dataSourceAvailable()) {
     renderSetupNote('setupNote');
     showState('stateBanner', null);
     return;
   }
   document.getElementById('setupNote').style.display = 'none';
-  showState('stateBanner', 'loading', 'Loading manufacturing data from Odoo…');
+  showState('stateBanner', 'loading', 'Loading manufacturing data…');
   try {
-    const data = await fetchOdooReport('/api/manufacturing', customRange || { months });
+    const data = await fetchReport('/api/manufacturing', customRange || { months }, fromCache);
     showState('stateBanner', null);
+    lastData = data;
     render(data);
   } catch (err) {
     showState('stateBanner', 'error', err.message);
@@ -121,8 +133,42 @@ function render(data) {
   renderRankBars('topProducts', data.top_products.map(p => ({ label: p.product, value: p.qty_produced })));
 }
 
-load();
-renderCompanySwitcher('companySwitcher');
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  exportToExcel(exportFilename('manufacturing-dashboard'), [
+    {
+      name: 'Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Total Orders', d.kpis.total_orders],
+        ['Done', d.kpis.done],
+        ['In Progress', d.kpis.in_progress],
+        ['Delayed', d.kpis.delayed],
+      ],
+    },
+    {
+      name: 'Monthly Trend',
+      headers: ['Month', 'Count'],
+      rows: d.monthly_trend.map(r => [r.month, r.count]),
+    },
+    {
+      name: 'By State',
+      headers: ['State', 'Count'],
+      rows: d.by_state.map(s => [STATE_LABELS[s.state] || s.state, s.count]),
+    },
+    {
+      name: 'Top Products',
+      headers: ['Product', 'Qty Produced'],
+      rows: d.top_products.map(p => [p.product, p.qty_produced]),
+    },
+  ]);
+}
+
+requireFirebaseAuth(() => {
+  load();
+  renderCompanySwitcher('companySwitcher');
+});
 </script>
 </body>
 </html>

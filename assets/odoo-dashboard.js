@@ -25,6 +25,14 @@ function odooConfigured() {
   return odooProxyConfigured() || Boolean(getDirectConfig());
 }
 
+// True if the dashboard has *some* way to get data — either live Odoo
+// (proxy or direct) or cached Firestore snapshots (assets/firebase-client.js).
+// A page with only Firebase configured can still show its default view
+// straight from the cache, with no Odoo credentials in the browser at all.
+function dataSourceAvailable() {
+  return (typeof firebaseConfigured === 'function' && firebaseConfigured()) || odooConfigured();
+}
+
 // ── Multi-company ─────────────────────────────────────────────────────────
 const ODOO_COMPANY_STORAGE_KEY = 'odoo_selected_company_id';
 
@@ -46,11 +54,19 @@ function onCompanyChange(id) {
 // "All Companies (Consolidated)" option alongside each individual company.
 // Selecting one persists to localStorage (read by fetchOdooReport below)
 // and re-runs the page's load() function, if it defines one.
+async function fetchCompanies() {
+  if (typeof firebaseConfigured === 'function' && firebaseConfigured()) {
+    try { return await fetchFirestoreCompanies(); } catch (err) { /* fall through to live Odoo */ }
+  }
+  const { companies } = await fetchOdooReport('/api/companies');
+  return companies;
+}
+
 async function renderCompanySwitcher(containerId) {
   const el = document.getElementById(containerId);
-  if (!el || !odooConfigured()) return;
+  if (!el || !dataSourceAvailable()) return;
   try {
-    const { companies } = await fetchOdooReport('/api/companies');
+    const companies = await fetchCompanies();
     if (!companies || companies.length < 2) { el.innerHTML = ''; return; }
     const current = getSelectedCompanyId();
     const options = ['<option value="">All Companies (Consolidated)</option>']
@@ -81,6 +97,47 @@ async function fetchOdooReport(path, params = {}) {
     return fetchOdooReportDirect(path, finalParams, directCfg);
   }
   throw new Error('SETUP_REQUIRED');
+}
+
+// Cache-first report fetch: a page's default view (fromCache=true, the
+// default) reads the last synced snapshot straight from Firestore when
+// Firebase is configured — instant, no Odoo round-trip, no API key in the
+// browser. Any period button, custom date range, or explicit refresh
+// passes fromCache=false to bypass the cache and hit Odoo (proxy or
+// direct) live, same as before Firebase existed. Falls back to a live
+// fetch automatically if there's no snapshot yet (e.g. sync hasn't run).
+async function fetchReport(path, params = {}, fromCache = true) {
+  if (fromCache && typeof firebaseConfigured === 'function' && firebaseConfigured()) {
+    try {
+      return await fetchFirestoreReport(path, getSelectedCompanyId());
+    } catch (err) {
+      if (!odooConfigured()) throw err;
+    }
+  }
+  return fetchOdooReport(path, params);
+}
+
+// ── Excel export (SheetJS, loaded from CDN as the global `XLSX`) ─────────
+// Each page includes the CDN script tag itself; this just builds a
+// workbook from whatever data that page already has loaded (no extra
+// Odoo calls) and triggers a browser download. sheets: [{ name, headers,
+// rows: array of arrays }].
+function exportToExcel(filename, sheets) {
+  if (typeof XLSX === 'undefined') {
+    alert('Excel export library failed to load — check your internet connection and try again.');
+    return;
+  }
+  const wb = XLSX.utils.book_new();
+  sheets.forEach(({ name, headers, rows }) => {
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31)); // Excel sheet names cap at 31 chars
+  });
+  XLSX.writeFile(wb, filename);
+}
+
+function exportFilename(prefix) {
+  const d = new Date().toISOString().slice(0, 10);
+  return `${prefix}-${d}.xlsx`;
 }
 
 // ── Formatting ──────────────────────────────────────────────────────────
