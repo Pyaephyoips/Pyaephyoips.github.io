@@ -515,6 +515,86 @@ async function directBuildWarehouseReport(cfg, uid, params) {
   };
 }
 
+// See buildInventoryMovementReport in odoo-proxy/worker.js for the full
+// rationale behind each category's domain and the quantity field choice.
+async function directBuildInventoryMovementReport(cfg, uid, params) {
+  const companyId = directGetCompanyId(params);
+  const { dateFrom, dateTo } = directResolveRange(params);
+  const doneWindow = [['state', '=', 'done'], ['date', '>=', dateFrom], ['date', '<=', dateTo]];
+
+  const grnDomain = directWithCompany([...doneWindow, ['picking_type_id.code', '=', 'incoming'], ['origin_returned_move_id', '=', false]], companyId);
+  const ginDomain = directWithCompany([...doneWindow, ['picking_type_id.code', '=', 'outgoing'], ['origin_returned_move_id', '=', false]], companyId);
+  const returnedDomain = directWithCompany([...doneWindow, ['origin_returned_move_id', '!=', false]], companyId);
+  const adjustmentDomain = directWithCompany([
+    ...doneWindow, ['picking_id', '=', false],
+    '|', ['location_dest_id.usage', '=', 'inventory'], ['location_id.usage', '=', 'inventory'],
+  ], companyId);
+  const scrapDomain = directWithCompany([['state', '=', 'done'], ['date_done', '>=', dateFrom], ['date_done', '<=', dateTo]], companyId);
+
+  const [
+    grnTotals, grnMonthly, grnByProduct,
+    ginTotals, ginMonthly, ginByProduct,
+    returnedTotals, returnedMonthly,
+    adjustmentTotals, adjustmentMonthly,
+    scrapTotals, scrapMonthly, scrapByProduct,
+  ] = await Promise.all([
+    directReadGroup(cfg, uid, 'stock.move', grnDomain, ['product_qty'], []),
+    directReadGroup(cfg, uid, 'stock.move', grnDomain, ['product_qty'], ['date:month']),
+    directReadGroup(cfg, uid, 'stock.move', grnDomain, ['product_qty'], ['product_id']),
+    directReadGroup(cfg, uid, 'stock.move', ginDomain, ['product_qty'], []),
+    directReadGroup(cfg, uid, 'stock.move', ginDomain, ['product_qty'], ['date:month']),
+    directReadGroup(cfg, uid, 'stock.move', ginDomain, ['product_qty'], ['product_id']),
+    directReadGroup(cfg, uid, 'stock.move', returnedDomain, ['product_qty'], []),
+    directReadGroup(cfg, uid, 'stock.move', returnedDomain, ['product_qty'], ['date:month']),
+    directReadGroup(cfg, uid, 'stock.move', adjustmentDomain, ['product_qty'], []),
+    directReadGroup(cfg, uid, 'stock.move', adjustmentDomain, ['product_qty'], ['date:month']),
+    directReadGroup(cfg, uid, 'stock.scrap', scrapDomain, ['scrap_qty'], []),
+    directReadGroup(cfg, uid, 'stock.scrap', scrapDomain, ['scrap_qty'], ['date_done:month']),
+    directReadGroup(cfg, uid, 'stock.scrap', scrapDomain, ['scrap_qty'], ['product_id']),
+  ]);
+
+  const totals = (rows, field) => ({ count: rows[0]?.__count || 0, qty: rows[0]?.[field] || 0 });
+
+  const monthMap = {};
+  const addMonthly = (rows, key, dateKey, qtyField) => {
+    for (const r of rows) {
+      const month = r[dateKey];
+      if (!month) continue;
+      if (!monthMap[month]) monthMap[month] = { month, grn_qty: 0, gin_qty: 0, returned_qty: 0, scrap_qty: 0, adjustment_qty: 0 };
+      monthMap[month][key] += r[qtyField] || 0;
+    }
+  };
+  addMonthly(grnMonthly, 'grn_qty', 'date:month', 'product_qty');
+  addMonthly(ginMonthly, 'gin_qty', 'date:month', 'product_qty');
+  addMonthly(returnedMonthly, 'returned_qty', 'date:month', 'product_qty');
+  addMonthly(adjustmentMonthly, 'adjustment_qty', 'date:month', 'product_qty');
+  addMonthly(scrapMonthly, 'scrap_qty', 'date_done:month', 'scrap_qty');
+  const monthlyTrend = Object.values(monthMap).sort((a, b) => new Date(a.month) - new Date(b.month));
+
+  const productLabel = (rows, qtyField) => directTopN(rows, qtyField).map(r => ({
+    product: r.product_id ? r.product_id[1] : 'Unknown', qty: r[qtyField],
+  }));
+
+  return {
+    period: { date_from: dateFrom, date_to: dateTo },
+    kpis: {
+      grn: totals(grnTotals, 'product_qty'),
+      gin: totals(ginTotals, 'product_qty'),
+      returned: totals(returnedTotals, 'product_qty'),
+      scrap: totals(scrapTotals, 'scrap_qty'),
+      adjustment: totals(adjustmentTotals, 'product_qty'),
+    },
+    monthly_trend: monthlyTrend,
+    top_received: productLabel(grnByProduct, 'product_qty'),
+    top_issued: productLabel(ginByProduct, 'product_qty'),
+    top_scrapped: productLabel(scrapByProduct, 'scrap_qty'),
+    note: 'GRN = incoming receipts, GIN = outgoing issues, Returned = either direction where Odoo\'s ' +
+          'return-tracking field marks a move as reversing an earlier one, Adjustment = stock changes with ' +
+          'no transfer (counted-quantity corrections), Scrap = the Scrap Orders (stock.scrap) model. ' +
+          'Quantities are each record\'s demand/counted quantity, not a valuation.',
+  };
+}
+
 async function fetchOdooReportDirect(path, params, cfg) {
   const uid = await directAuthenticate(cfg);
   switch (path) {
@@ -526,6 +606,7 @@ async function fetchOdooReportDirect(path, params, cfg) {
     case '/api/manufacturing': return directBuildManufacturingReport(cfg, uid, params);
     case '/api/accounting': return directBuildAccountingReport(cfg, uid, params);
     case '/api/warehouse': return directBuildWarehouseReport(cfg, uid, params);
+    case '/api/inventory-movement': return directBuildInventoryMovementReport(cfg, uid, params);
     default: throw new Error(`Unknown report path: ${path}`);
   }
 }

@@ -534,6 +534,94 @@ async function buildWarehouseReport(env, uid, params) {
   };
 }
 
+// Classifies done stock.move records into GIN (Goods Issued — outgoing,
+// not a return), GRN (Goods Received — incoming, not a return), Returned
+// (either direction, wherever Odoo's own return-tracking field says a move
+// reverses an earlier one), and Adjustment (no picking at all, touching the
+// virtual "Inventory Adjustment" location — how Odoo 17+ records a counted
+// quantity change). Scrap comes from the separate stock.scrap model, which
+// Odoo uses for all scrap orders regardless of version. Quantities use each
+// record's product_qty/scrap_qty (the demand/counted quantity, not the
+// "done" quantity field, whose name changed across Odoo versions) — a
+// simplified approximation in the same spirit as the Financials report.
+async function buildInventoryMovementReport(env, uid, params) {
+  const companyId = getCompanyId(params);
+  const { dateFrom, dateTo } = resolveRange(params);
+  const doneWindow = [['state', '=', 'done'], ['date', '>=', dateFrom], ['date', '<=', dateTo]];
+
+  const grnDomain = withCompany([...doneWindow, ['picking_type_id.code', '=', 'incoming'], ['origin_returned_move_id', '=', false]], companyId);
+  const ginDomain = withCompany([...doneWindow, ['picking_type_id.code', '=', 'outgoing'], ['origin_returned_move_id', '=', false]], companyId);
+  const returnedDomain = withCompany([...doneWindow, ['origin_returned_move_id', '!=', false]], companyId);
+  const adjustmentDomain = withCompany([
+    ...doneWindow, ['picking_id', '=', false],
+    '|', ['location_dest_id.usage', '=', 'inventory'], ['location_id.usage', '=', 'inventory'],
+  ], companyId);
+  const scrapDomain = withCompany([['state', '=', 'done'], ['date_done', '>=', dateFrom], ['date_done', '<=', dateTo]], companyId);
+
+  const [
+    grnTotals, grnMonthly, grnByProduct,
+    ginTotals, ginMonthly, ginByProduct,
+    returnedTotals, returnedMonthly,
+    adjustmentTotals, adjustmentMonthly,
+    scrapTotals, scrapMonthly, scrapByProduct,
+  ] = await Promise.all([
+    readGroup(env, uid, 'stock.move', grnDomain, ['product_qty'], []),
+    readGroup(env, uid, 'stock.move', grnDomain, ['product_qty'], ['date:month']),
+    readGroup(env, uid, 'stock.move', grnDomain, ['product_qty'], ['product_id']),
+    readGroup(env, uid, 'stock.move', ginDomain, ['product_qty'], []),
+    readGroup(env, uid, 'stock.move', ginDomain, ['product_qty'], ['date:month']),
+    readGroup(env, uid, 'stock.move', ginDomain, ['product_qty'], ['product_id']),
+    readGroup(env, uid, 'stock.move', returnedDomain, ['product_qty'], []),
+    readGroup(env, uid, 'stock.move', returnedDomain, ['product_qty'], ['date:month']),
+    readGroup(env, uid, 'stock.move', adjustmentDomain, ['product_qty'], []),
+    readGroup(env, uid, 'stock.move', adjustmentDomain, ['product_qty'], ['date:month']),
+    readGroup(env, uid, 'stock.scrap', scrapDomain, ['scrap_qty'], []),
+    readGroup(env, uid, 'stock.scrap', scrapDomain, ['scrap_qty'], ['date_done:month']),
+    readGroup(env, uid, 'stock.scrap', scrapDomain, ['scrap_qty'], ['product_id']),
+  ]);
+
+  const totals = (rows, field) => ({ count: rows[0]?.__count || 0, qty: rows[0]?.[field] || 0 });
+
+  const monthMap = {};
+  const addMonthly = (rows, key, dateKey, qtyField) => {
+    for (const r of rows) {
+      const month = r[dateKey];
+      if (!month) continue;
+      if (!monthMap[month]) monthMap[month] = { month, grn_qty: 0, gin_qty: 0, returned_qty: 0, scrap_qty: 0, adjustment_qty: 0 };
+      monthMap[month][key] += r[qtyField] || 0;
+    }
+  };
+  addMonthly(grnMonthly, 'grn_qty', 'date:month', 'product_qty');
+  addMonthly(ginMonthly, 'gin_qty', 'date:month', 'product_qty');
+  addMonthly(returnedMonthly, 'returned_qty', 'date:month', 'product_qty');
+  addMonthly(adjustmentMonthly, 'adjustment_qty', 'date:month', 'product_qty');
+  addMonthly(scrapMonthly, 'scrap_qty', 'date_done:month', 'scrap_qty');
+  const monthlyTrend = Object.values(monthMap).sort((a, b) => new Date(a.month) - new Date(b.month));
+
+  const productLabel = (rows, qtyField) => topN(rows, qtyField).map(r => ({
+    product: r.product_id ? r.product_id[1] : 'Unknown', qty: r[qtyField],
+  }));
+
+  return {
+    period: { date_from: dateFrom, date_to: dateTo },
+    kpis: {
+      grn: totals(grnTotals, 'product_qty'),
+      gin: totals(ginTotals, 'product_qty'),
+      returned: totals(returnedTotals, 'product_qty'),
+      scrap: totals(scrapTotals, 'scrap_qty'),
+      adjustment: totals(adjustmentTotals, 'product_qty'),
+    },
+    monthly_trend: monthlyTrend,
+    top_received: productLabel(grnByProduct, 'product_qty'),
+    top_issued: productLabel(ginByProduct, 'product_qty'),
+    top_scrapped: productLabel(scrapByProduct, 'scrap_qty'),
+    note: 'GRN = incoming receipts, GIN = outgoing issues, Returned = either direction where Odoo\'s ' +
+          'return-tracking field marks a move as reversing an earlier one, Adjustment = stock changes with ' +
+          'no transfer (counted-quantity corrections), Scrap = the Scrap Orders (stock.scrap) model. ' +
+          'Quantities are each record\'s demand/counted quantity, not a valuation.',
+  };
+}
+
 // ── Router ───────────────────────────────────────────────────────────────
 export default {
   async fetch(request, env) {
@@ -574,6 +662,9 @@ export default {
           break;
         case '/api/warehouse':
           result = await buildWarehouseReport(env, uid, url.searchParams);
+          break;
+        case '/api/inventory-movement':
+          result = await buildInventoryMovementReport(env, uid, url.searchParams);
           break;
         default:
           return json(env, { error: 'Not found' }, 404);

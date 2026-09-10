@@ -24,6 +24,7 @@ const {
   buildManufacturingReport,
   buildAccountingReport,
   buildWarehouseReport,
+  buildInventoryMovementReport,
 } = require('./reports');
 
 admin.initializeApp();
@@ -43,6 +44,7 @@ const REPORT_BUILDERS = {
   manufacturing: buildManufacturingReport,
   accounting: buildAccountingReport,
   warehouse: buildWarehouseReport,
+  inventoryMovement: buildInventoryMovementReport,
 };
 
 async function syncTarget(cfg, uid, key, companyId) {

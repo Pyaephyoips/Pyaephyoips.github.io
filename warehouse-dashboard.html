@@ -34,25 +34,79 @@
     <button class="btn-refresh" onclick="load(false)">↻ Refresh</button>
   </div>
 
-  <div class="kpi-row" id="kpiRow"></div>
+  <div class="tab-btns">
+    <button class="tab-btn active" onclick="switchTab('stock',this)">📦 Stock Levels</button>
+    <button class="tab-btn" onclick="switchTab('movement',this)">🔁 Movement (GIN/GRN/Returns/Scrap/Adjustment)</button>
+  </div>
 
-  <div class="two-col">
-    <div class="section-card">
-      <div class="section-header"><h3>🏬 Stock Value by Warehouse</h3></div>
-      <div id="byWarehouseValue"></div>
+  <div class="tab-panel active" id="stockPanel">
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <div class="two-col">
+      <div class="section-card">
+        <div class="section-header"><h3>🏬 Stock Value by Warehouse</h3></div>
+        <div id="byWarehouseValue"></div>
+      </div>
+      <div class="section-card">
+        <div class="section-header"><h3>📦 Stock Quantity by Warehouse</h3></div>
+        <div id="byWarehouseQty"></div>
+      </div>
     </div>
+
     <div class="section-card">
-      <div class="section-header"><h3>📦 Stock Quantity by Warehouse</h3></div>
-      <div id="byWarehouseQty"></div>
+      <div class="section-header"><h3>🚚 Transfer Activity (Last 30 Days)</h3></div>
+      <table>
+        <thead><tr><th>Transfer Type</th><th class="num">Count</th></tr></thead>
+        <tbody id="transferBody"></tbody>
+      </table>
     </div>
   </div>
 
-  <div class="section-card">
-    <div class="section-header"><h3>🚚 Transfer Activity (Last 30 Days)</h3></div>
-    <table>
-      <thead><tr><th>Transfer Type</th><th class="num">Count</th></tr></thead>
-      <tbody id="transferBody"></tbody>
-    </table>
+  <div class="tab-panel" id="movementPanel">
+    <div class="controls" style="margin-bottom:1.25rem">
+      <span style="font-size:.85rem;color:var(--muted)">Period:</span>
+      <button class="period-btn" data-m="3" onclick="setPeriod(3,this)">3 Months</button>
+      <button class="period-btn" data-m="6" onclick="setPeriod(6,this)">6 Months</button>
+      <button class="period-btn active" data-m="12" onclick="setPeriod(12,this)">12 Months</button>
+      <button class="period-btn" data-m="24" onclick="setPeriod(24,this)">24 Months</button>
+      <div class="date-range">
+        <input type="date" id="dateFrom">
+        <span style="color:var(--muted);font-size:.8rem">to</span>
+        <input type="date" id="dateTo">
+        <button class="btn-apply-range" onclick="applyCustomRange()">Apply</button>
+      </div>
+    </div>
+
+    <div class="exec-hero" id="movementHero"></div>
+
+    <div class="section-card">
+      <div class="section-header"><h3>📅 Monthly Movement Breakdown (Qty)</h3></div>
+      <table>
+        <thead><tr>
+          <th>Month</th><th class="num">GRN</th><th class="num">GIN</th>
+          <th class="num">Returned</th><th class="num">Scrap</th><th class="num">Adjustment</th>
+        </tr></thead>
+        <tbody id="movementMonthlyBody"></tbody>
+      </table>
+    </div>
+
+    <div class="two-col">
+      <div class="section-card">
+        <div class="section-header"><h3>📥 Top Received Products (GRN)</h3></div>
+        <div id="topReceived"></div>
+      </div>
+      <div class="section-card">
+        <div class="section-header"><h3>📤 Top Issued Products (GIN)</h3></div>
+        <div id="topIssued"></div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header"><h3>🗑️ Top Scrapped Products</h3></div>
+      <div id="topScrapped"></div>
+    </div>
+
+    <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="movementNote"></p>
   </div>
 </div>
 
@@ -60,12 +114,41 @@
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script src="assets/firebase-config.js"></script>
-<script src="assets/firebase-client.js?v=1"></script>
+<script src="assets/firebase-client.js?v=2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="assets/odoo-client.js?v=11"></script>
-<script src="assets/odoo-dashboard.js?v=11"></script>
+<script src="assets/odoo-client.js?v=12"></script>
+<script src="assets/odoo-dashboard.js?v=12"></script>
 <script>
-let lastData = null;
+let lastStockData = null;
+let lastMovementData = null;
+let months = 12;
+let customRange = null;
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('stockPanel').classList.toggle('active', tab === 'stock');
+  document.getElementById('movementPanel').classList.toggle('active', tab === 'movement');
+}
+
+function setPeriod(m, btn) {
+  months = m;
+  customRange = null;
+  document.getElementById('dateFrom').value = '';
+  document.getElementById('dateTo').value = '';
+  document.querySelectorAll('#movementPanel .period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  load(false);
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('dateFrom').value;
+  const to = document.getElementById('dateTo').value;
+  if (!from || !to) { alert('Please pick both a start and end date.'); return; }
+  customRange = { date_from: from, date_to: to };
+  document.querySelectorAll('#movementPanel .period-btn').forEach(b => b.classList.remove('active'));
+  load(false);
+}
 
 async function load(fromCache = true) {
   if (!dataSourceAvailable()) {
@@ -76,16 +159,29 @@ async function load(fromCache = true) {
   document.getElementById('setupNote').style.display = 'none';
   showState('stateBanner', 'loading', 'Loading warehouse data…');
   try {
-    const data = await fetchReport('/api/warehouse', {}, fromCache);
+    await Promise.all([loadStock(fromCache), loadMovement(fromCache)]);
     showState('stateBanner', null);
-    lastData = data;
-    render(data);
   } catch (err) {
     showState('stateBanner', 'error', err.message);
   }
 }
 
-function render(data) {
+async function loadStock(fromCache) {
+  const data = await fetchReport('/api/warehouse', {}, fromCache);
+  lastStockData = data;
+  renderStock(data);
+}
+
+async function loadMovement(fromCache) {
+  // The Firestore cache only holds the trailing-12-months default — any
+  // other preset or a custom range always goes live.
+  const useCache = fromCache && months === 12 && !customRange;
+  const data = await fetchReport('/api/inventory-movement', customRange || { months }, useCache);
+  lastMovementData = data;
+  renderMovement(data);
+}
+
+function renderStock(data) {
   document.getElementById('asOfLabel').textContent = `As of ${data.as_of}`;
 
   const totalValue = data.by_warehouse.reduce((s, w) => s + (w.value || 0), 0);
@@ -106,29 +202,76 @@ function render(data) {
   `, 2);
 }
 
+const MOVEMENT_TILES = [
+  { key: 'grn', label: 'GRN — Received', emoji: '📥', color: '#38bdf8' },
+  { key: 'gin', label: 'GIN — Issued', emoji: '📤', color: '#f97316' },
+  { key: 'returned', label: 'Returned', emoji: '↩️', color: '#a78bfa' },
+  { key: 'scrap', label: 'Scrap', emoji: '🗑️', color: '#ef4444' },
+  { key: 'adjustment', label: 'Adjustment', emoji: '🛠️', color: '#22c55e' },
+];
+
+function renderMovement(data) {
+  const k = data.kpis;
+  const chrono = data.monthly_trend || [];
+
+  document.getElementById('movementHero').innerHTML = MOVEMENT_TILES.map(t => `
+    <div class="exec-tile">
+      <div class="label">${t.emoji} ${t.label}</div>
+      <div class="value">${fmtInt(k[t.key].count)}</div>
+      <div class="subvalue">${fmtInt(k[t.key].qty)} units</div>
+      <svg class="spark" id="spark_${t.key}"></svg>
+    </div>
+  `).join('');
+  MOVEMENT_TILES.forEach(t => renderSparkline(`spark_${t.key}`, chrono.map(m => m[`${t.key}_qty`] || 0), { color: t.color }));
+
+  renderTable('movementMonthlyBody', chrono, r => `
+    <tr>
+      <td>${r.month}</td>
+      <td class="num">${fmtInt(r.grn_qty)}</td>
+      <td class="num">${fmtInt(r.gin_qty)}</td>
+      <td class="num">${fmtInt(r.returned_qty)}</td>
+      <td class="num">${fmtInt(r.scrap_qty)}</td>
+      <td class="num">${fmtInt(r.adjustment_qty)}</td>
+    </tr>
+  `, 6);
+
+  renderRankBars('topReceived', (data.top_received || []).map(r => ({ label: r.product, value: r.qty })));
+  renderRankBars('topIssued', (data.top_issued || []).map(r => ({ label: r.product, value: r.qty })));
+  renderRankBars('topScrapped', (data.top_scrapped || []).map(r => ({ label: r.product, value: r.qty })), { colorFn: () => 'var(--red)' });
+
+  document.getElementById('movementNote').textContent = data.note || '';
+}
+
 function exportExcel() {
-  if (!lastData) { alert('Load the dashboard data first.'); return; }
-  const d = lastData;
-  exportToExcel(exportFilename('warehouse-dashboard'), [
-    {
-      name: 'By Warehouse',
-      headers: ['Warehouse', 'Quantity', 'Value'],
-      rows: d.by_warehouse.map(w => [w.warehouse, w.quantity, w.value]),
-    },
-    {
-      name: 'Transfer Activity',
-      headers: ['Transfer Type', 'Count'],
-      rows: d.transfer_activity_last_30d.map(r => [r.picking_type, r.count]),
-    },
-    {
-      name: 'Summary',
-      headers: ['Metric', 'Value'],
-      rows: [
-        ['Warehouses', d.warehouses.length],
-        ['Pending Transfers', d.pending_transfers],
-      ],
-    },
-  ]);
+  if (!lastStockData && !lastMovementData) { alert('Load the dashboard data first.'); return; }
+  const sheets = [];
+  if (lastStockData) {
+    const d = lastStockData;
+    sheets.push(
+      { name: 'By Warehouse', headers: ['Warehouse', 'Quantity', 'Value'], rows: d.by_warehouse.map(w => [w.warehouse, w.quantity, w.value]) },
+      { name: 'Transfer Activity', headers: ['Transfer Type', 'Count'], rows: d.transfer_activity_last_30d.map(r => [r.picking_type, r.count]) },
+      { name: 'Stock Summary', headers: ['Metric', 'Value'], rows: [['Warehouses', d.warehouses.length], ['Pending Transfers', d.pending_transfers]] },
+    );
+  }
+  if (lastMovementData) {
+    const m = lastMovementData;
+    sheets.push(
+      {
+        name: 'Movement Summary',
+        headers: ['Category', 'Transactions', 'Qty'],
+        rows: MOVEMENT_TILES.map(t => [t.label, m.kpis[t.key].count, m.kpis[t.key].qty]),
+      },
+      {
+        name: 'Monthly Movement',
+        headers: ['Month', 'GRN', 'GIN', 'Returned', 'Scrap', 'Adjustment'],
+        rows: (m.monthly_trend || []).map(r => [r.month, r.grn_qty, r.gin_qty, r.returned_qty, r.scrap_qty, r.adjustment_qty]),
+      },
+      { name: 'Top Received (GRN)', headers: ['Product', 'Qty'], rows: (m.top_received || []).map(r => [r.product, r.qty]) },
+      { name: 'Top Issued (GIN)', headers: ['Product', 'Qty'], rows: (m.top_issued || []).map(r => [r.product, r.qty]) },
+      { name: 'Top Scrapped', headers: ['Product', 'Qty'], rows: (m.top_scrapped || []).map(r => [r.product, r.qty]) },
+    );
+  }
+  exportToExcel(exportFilename('warehouse-dashboard'), sheets);
 }
 
 requireFirebaseAuth(() => {
