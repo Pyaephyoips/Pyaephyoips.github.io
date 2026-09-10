@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Accounting Dashboard</title>
+  <link rel="stylesheet" href="assets/odoo-dashboard.css">
+</head>
+<body>
+<header class="dash-header">
+  <h1>🧾 Accounting Dashboard</h1>
+  <nav class="dash-nav">
+    <a href="index.html">← Home</a>
+    <a href="executive-dashboard.html">Executive</a>
+    <a href="sales-dashboard.html">Sales</a>
+    <a href="financial-dashboard.html">B&amp;S / P&amp;L</a>
+    <a href="inventory-dashboard.html">Inventory</a>
+    <a href="purchase-dashboard.html">Purchase</a>
+    <a href="manufacturing-dashboard.html">Manufacturing</a>
+    <a href="accounting-dashboard.html" class="active">Accounting</a>
+    <a href="warehouse-dashboard.html">Warehouse</a>
+  </nav>
+</header>
+
+<div class="dash-main">
+  <div class="setup-note" id="setupNote" style="display:none"></div>
+  <div class="state-banner" id="stateBanner" style="display:none"></div>
+
+  <div class="controls">
+    <span style="font-size:.85rem;color:var(--muted)" id="asOfLabel">Open receivables/payables snapshot</span>
+    <div id="companySwitcher"></div>
+    <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
+    <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
+    <button class="btn-refresh" onclick="load(false)">↻ Refresh</button>
+  </div>
+
+  <div class="kpi-row" id="kpiRow"></div>
+
+  <div class="two-col">
+    <div class="section-card">
+      <div class="section-header">
+        <h3>📥 Receivables Aging</h3>
+        <span class="total pos" id="arTotal">0.00</span>
+      </div>
+      <div id="arAging"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header">
+        <h3>📤 Payables Aging</h3>
+        <span class="total neg" id="apTotal">0.00</span>
+      </div>
+      <div id="apAging"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="section-card">
+      <div class="section-header"><h3>👤 Top Customers by Amount Due</h3></div>
+      <div id="arTop"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header"><h3>🏭 Top Suppliers by Amount Due</h3></div>
+      <div id="apTop"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <div class="section-header"><h3>📚 Journal Activity This Month</h3></div>
+    <table>
+      <thead><tr><th>Move Type</th><th class="num">Entries</th><th class="num">Total</th></tr></thead>
+      <tbody id="journalBody"></tbody>
+    </table>
+  </div>
+
+  <p style="font-size:0.75rem;color:var(--muted);margin-top:0.5rem" id="reportNote"></p>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/firebase-client.js?v=1"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="assets/odoo-client.js?v=11"></script>
+<script src="assets/odoo-dashboard.js?v=11"></script>
+<script>
+let lastData = null;
+
+const BUCKET_LABELS = { current: 'Current', '1_30': '1-30 days', '31_60': '31-60 days', '61_90': '61-90 days', over_90: 'Over 90 days' };
+const BUCKET_KEYS = ['current', '1_30', '31_60', '61_90', 'over_90'];
+
+async function load(fromCache = true) {
+  if (!dataSourceAvailable()) {
+    renderSetupNote('setupNote');
+    showState('stateBanner', null);
+    return;
+  }
+  document.getElementById('setupNote').style.display = 'none';
+  showState('stateBanner', 'loading', 'Loading accounting data…');
+  try {
+    const data = await fetchReport('/api/accounting', {}, fromCache);
+    showState('stateBanner', null);
+    lastData = data;
+    render(data);
+  } catch (err) {
+    showState('stateBanner', 'error', err.message);
+  }
+}
+
+function render(data) {
+  document.getElementById('asOfLabel').textContent = `As of ${data.as_of}`;
+
+  renderKpis('kpiRow', [
+    { label: 'Total Receivables', value: fmtMoney(data.receivables.total), cls: 'pos' },
+    { label: 'Overdue Receivables', value: fmtMoney(data.receivables.overdue), cls: data.receivables.overdue > 0 ? 'warn' : '' },
+    { label: 'Total Payables', value: fmtMoney(data.payables.total), cls: 'neg' },
+    { label: 'Overdue Payables', value: fmtMoney(data.payables.overdue), cls: data.payables.overdue > 0 ? 'warn' : '' },
+  ]);
+
+  document.getElementById('arTotal').textContent = fmtMoney(data.receivables.total);
+  document.getElementById('apTotal').textContent = fmtMoney(data.payables.total);
+
+  renderRankBars('arAging', BUCKET_KEYS.map(k => ({ label: BUCKET_LABELS[k], value: data.receivables.buckets[k] || 0 })),
+    { colorFn: r => r.label === 'Current' ? 'var(--green)' : 'var(--accent)' });
+  renderRankBars('apAging', BUCKET_KEYS.map(k => ({ label: BUCKET_LABELS[k], value: data.payables.buckets[k] || 0 })),
+    { colorFn: r => r.label === 'Current' ? 'var(--green)' : 'var(--accent)' });
+
+  renderRankBars('arTop', data.receivables.top.map(t => ({ label: t.partner, value: t.total })));
+  renderRankBars('apTop', data.payables.top.map(t => ({ label: t.partner, value: t.total })));
+
+  renderTable('journalBody', data.journal_activity_this_month, r => `
+    <tr>
+      <td>${r.move_type}</td>
+      <td class="num">${fmtInt(r.count)}</td>
+      <td class="num">${fmtMoney(r.total)}</td>
+    </tr>
+  `, 3);
+
+  document.getElementById('reportNote').textContent = data.note || '';
+}
+
+function exportExcel() {
+  if (!lastData) { alert('Load the dashboard data first.'); return; }
+  const d = lastData;
+  exportToExcel(exportFilename('accounting-dashboard'), [
+    {
+      name: 'Summary',
+      headers: ['Metric', 'Value'],
+      rows: [
+        ['Total Receivables', d.receivables.total],
+        ['Overdue Receivables', d.receivables.overdue],
+        ['Total Payables', d.payables.total],
+        ['Overdue Payables', d.payables.overdue],
+      ],
+    },
+    {
+      name: 'AR Aging',
+      headers: ['Bucket', 'Amount'],
+      rows: BUCKET_KEYS.map(k => [BUCKET_LABELS[k], d.receivables.buckets[k] || 0]),
+    },
+    {
+      name: 'AP Aging',
+      headers: ['Bucket', 'Amount'],
+      rows: BUCKET_KEYS.map(k => [BUCKET_LABELS[k], d.payables.buckets[k] || 0]),
+    },
+    {
+      name: 'Top Customers Due',
+      headers: ['Customer', 'Amount'],
+      rows: d.receivables.top.map(t => [t.partner, t.total]),
+    },
+    {
+      name: 'Top Suppliers Due',
+      headers: ['Supplier', 'Amount'],
+      rows: d.payables.top.map(t => [t.partner, t.total]),
+    },
+    {
+      name: 'Journal Activity',
+      headers: ['Move Type', 'Entries', 'Total'],
+      rows: d.journal_activity_this_month.map(r => [r.move_type, r.count, r.total]),
+    },
+  ]);
+}
+
+requireFirebaseAuth(() => {
+  load();
+  renderCompanySwitcher('companySwitcher');
+});
+</script>
+</body>
+</html>

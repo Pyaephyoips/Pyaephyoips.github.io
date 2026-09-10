@@ -1,0 +1,14 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // The scheduled sync writes with the Admin SDK, which bypasses these
+    // rules entirely. Client access is read-only, and only for signed-in
+    // users (see assets/firebase-client.js's login gate) — the cached
+    // snapshots contain real sales/financial/inventory figures.
+    match /{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}

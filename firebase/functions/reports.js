@@ -1,25 +1,25 @@
 /**
- * Odoo Dashboard Proxy — Cloudflare Worker
+ * Report builders for the scheduled Odoo -> Firestore sync.
  *
- * Holds the Odoo API key server-side and exposes a small set of read-only,
- * pre-aggregated report endpoints for the static dashboards in this repo.
- * The dashboards never talk to Odoo directly (avoids CORS issues and never
- * ships the Odoo API key to the browser).
+ * sales/financials/inventory/purchase/manufacturing mirror
+ * odoo-proxy/worker.js exactly (same Odoo queries, same shape), computed
+ * with each dashboard's default view (12 trailing months for
+ * sales/purchase/manufacturing, year-to-date for financials, a live
+ * snapshot for inventory) since the sync has no per-viewer date range to
+ * work from. Dashboards fall back to a live Odoo call (proxy or direct)
+ * whenever someone picks a different period or custom date range.
  *
- * Required secrets/vars (set with `wrangler secret put <NAME>` or in the
- * Cloudflare dashboard — see README.md in this folder):
- *   ODOO_URL       e.g. https://your-odoo-host.example.com  (no trailing slash)
- *   ODOO_DB        Odoo database name
- *   ODOO_USERNAME  Odoo login (email) the API key belongs to
- *   ODOO_API_KEY   Odoo API key (Settings > Users > this user > API Keys)
- *   PROXY_TOKEN    A random string only your dashboard pages know, required
- *                  on every request via the X-Proxy-Token header. This does
- *                  NOT make the endpoint private (it's a public static site,
- *                  the token ships in the page source) — it only stops
- *                  casual scraping/link-sharing. Put this Worker behind
- *                  Cloudflare Access if you need real access control.
- *   ALLOWED_ORIGIN e.g. https://pyaephyoips.github.io  (CORS allow-list)
+ * accounting and warehouse are new report types with no proxy/direct
+ * equivalent history — see odoo-proxy/worker.js's buildAccountingReport /
+ * buildWarehouseReport (added alongside this) for the browser-facing twin
+ * used when Firestore isn't configured.
  */
+'use strict';
+
+const {
+  executeKw, readGroup, topN, searchRead, searchCount,
+  withCompany, monthsAgo, today, startOfYear,
+} = require('./odoo');
 
 const PL_INCOME_TYPES = ['income', 'income_other'];
 const PL_COGS_TYPES = ['expense_direct_cost'];
@@ -33,148 +33,41 @@ const BS_LIABILITY_TYPES = [
 ];
 const BS_EQUITY_TYPES = ['equity', 'equity_unaffected'];
 
-function corsHeaders(env) {
-  return {
-    'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN || '*',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Proxy-Token',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Vary': 'Origin',
-  };
-}
-
-function json(env, data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders(env) },
-  });
-}
-
-// ── Odoo JSON-RPC helpers ──────────────────────────────────────────────
-async function jsonRpc(env, service, method, args) {
-  const res = await fetch(`${env.ODOO_URL}/jsonrpc`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      method: 'call',
-      params: { service, method, args },
-      id: Math.floor(Math.random() * 1e9),
-    }),
-  });
-  const body = await res.json();
-  if (body.error) {
-    throw new Error(body.error.data?.message || body.error.message || 'Odoo RPC error');
-  }
-  return body.result;
-}
-
-async function odooAuthenticate(env) {
-  const uid = await jsonRpc(env, 'common', 'authenticate', [
-    env.ODOO_DB, env.ODOO_USERNAME, env.ODOO_API_KEY, {},
-  ]);
-  if (!uid) throw new Error('Odoo authentication failed — check ODOO_DB/ODOO_USERNAME/ODOO_API_KEY');
-  return uid;
-}
-
-async function executeKw(env, uid, model, method, args = [], kwargs = {}) {
-  return jsonRpc(env, 'object', 'execute_kw', [
-    env.ODOO_DB, uid, env.ODOO_API_KEY, model, method, args, kwargs,
-  ]);
-}
-
-async function readGroup(env, uid, model, domain, fields, groupby, opts = {}) {
-  return executeKw(env, uid, model, 'read_group', [domain, fields, groupby], opts);
-}
-
-// Sort + cap read_group results client-side instead of passing `orderby` to
-// Odoo — some Odoo versions reject ordering read_group by an aggregated
-// measure ("Order term '<field> desc' is not a valid aggregate nor valid
-// groupby"), so this avoids relying on that syntax at all.
-function topN(groups, field, n = 10) {
-  return [...groups].sort((a, b) => (b[field] || 0) - (a[field] || 0)).slice(0, n);
-}
-
-async function searchRead(env, uid, model, domain, fields, opts = {}) {
-  return executeKw(env, uid, model, 'search_read', [domain, fields], opts);
-}
-
-async function searchCount(env, uid, model, domain) {
-  return executeKw(env, uid, model, 'search_count', [domain]);
-}
-
-// Every model used by these reports (sale/purchase orders + lines,
-// account.move.line, stock.quant/move/orderpoint, mrp.production) carries
-// its own direct company_id field, so a single leaf works everywhere —
-// no dotted/related paths needed.
-function withCompany(domain, companyId) {
-  return companyId ? [...domain, ['company_id', '=', companyId]] : domain;
-}
-
-function getCompanyId(params) {
-  const raw = params.get('company_id');
-  const id = raw ? parseInt(raw, 10) : NaN;
-  return Number.isFinite(id) ? id : null;
-}
-
-// ── Date helpers ────────────────────────────────────────────────────────
-function isoDate(d) { return d.toISOString().slice(0, 10); }
-function monthsAgo(n) {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  d.setDate(1);
-  return isoDate(d);
-}
-function today() { return isoDate(new Date()); }
-
-// date_from/date_to win when given (custom range picker); otherwise fall
-// back to the months-count preset for backward compatibility.
-function resolveRange(params) {
-  const dateTo = params.get('date_to') || today();
-  const dateFrom = params.get('date_from')
-    || monthsAgo(Math.min(parseInt(params.get('months') || '12', 10), 36) - 1);
-  return { dateFrom, dateTo };
-}
-
-// ── Report builders ─────────────────────────────────────────────────────
-async function buildCompaniesReport(env, uid) {
-  const companies = await searchRead(env, uid, 'res.company', [], ['id', 'name'], { order: 'name' });
+async function buildCompaniesReport(cfg, uid) {
+  const companies = await searchRead(cfg, uid, 'res.company', [], ['id', 'name'], { order: 'name' });
   return { companies };
 }
 
-async function buildSalesReport(env, uid, params) {
-  const companyId = getCompanyId(params);
-  const { dateFrom, dateTo } = resolveRange(params);
+async function buildSalesReport(cfg, uid, companyId) {
+  const dateTo = today();
+  const dateFrom = monthsAgo(11);
   const soldStates = ['sale', 'done'];
 
   const [totals, monthly, byProduct, byCustomer, bySalesperson, pendingCount] = await Promise.all([
-    readGroup(env, uid, 'sale.order',
+    readGroup(cfg, uid, 'sale.order',
       withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], []),
-    readGroup(env, uid, 'sale.order',
+    readGroup(cfg, uid, 'sale.order',
       withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['date_order:month']),
-    readGroup(env, uid, 'sale.order.line',
+    readGroup(cfg, uid, 'sale.order.line',
       withCompany([['order_id.state', 'in', soldStates], ['order_id.date_order', '>=', dateFrom], ['order_id.date_order', '<=', dateTo], ['display_type', '=', false]], companyId),
       ['price_subtotal', 'product_uom_qty'], ['product_id']),
-    readGroup(env, uid, 'sale.order',
+    readGroup(cfg, uid, 'sale.order',
       withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['partner_id']),
-    readGroup(env, uid, 'sale.order',
+    readGroup(cfg, uid, 'sale.order',
       withCompany([['state', 'in', soldStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['user_id']),
-    searchCount(env, uid, 'sale.order', withCompany([['state', 'in', ['draft', 'sent']]], companyId)),
+    searchCount(cfg, uid, 'sale.order', withCompany([['state', 'in', ['draft', 'sent']]], companyId)),
   ]);
 
   const totalSales = totals[0]?.amount_total || 0;
   const orderCount = totals[0]?.__count || 0;
 
-  // Category per product, for the top-products table and the category
-  // rollup below. byProduct already covers every product sold in the
-  // period (topN only slices the top 10 for display), so the rollup is
-  // complete even though the table itself is capped.
   const soldProductIds = byProduct.filter(r => r.product_id).map(r => r.product_id[0]);
   const soldProducts = soldProductIds.length
-    ? await executeKw(env, uid, 'product.product', 'read', [soldProductIds, ['categ_id']])
+    ? await executeKw(cfg, uid, 'product.product', 'read', [soldProductIds, ['categ_id']])
     : [];
   const categById = Object.fromEntries(soldProducts.map(p => [p.id, p.categ_id ? p.categ_id[1] : 'Uncategorized']));
 
@@ -209,21 +102,17 @@ async function buildSalesReport(env, uid, params) {
   };
 }
 
-async function buildFinancialsReport(env, uid, params) {
-  const companyId = getCompanyId(params);
-  const dateFrom = params.get('date_from') || monthsAgo(11);
-  const dateTo = params.get('date_to') || today();
+async function buildFinancialsReport(cfg, uid, companyId) {
+  // Year-to-date, matching the Financial dashboard's default "This Year"
+  // period button.
+  const dateFrom = startOfYear();
+  const dateTo = today();
 
-  // Group by account_id only (not the related account_type) — some Odoo
-  // versions reject filtering/grouping account.move.line by a dotted
-  // account_id.account_type path ("Property name ... has to be used on a
-  // property field"). account_type is read directly from account.account
-  // below instead, which is always a plain field access.
   const [plByAccount, bsByAccount] = await Promise.all([
-    readGroup(env, uid, 'account.move.line',
+    readGroup(cfg, uid, 'account.move.line',
       withCompany([['parent_state', '=', 'posted'], ['date', '>=', dateFrom], ['date', '<=', dateTo]], companyId),
       ['balance'], ['account_id']),
-    readGroup(env, uid, 'account.move.line',
+    readGroup(cfg, uid, 'account.move.line',
       withCompany([['parent_state', '=', 'posted'], ['date', '<=', dateTo]], companyId),
       ['balance'], ['account_id']),
   ]);
@@ -232,7 +121,7 @@ async function buildFinancialsReport(env, uid, params) {
     [...plByAccount, ...bsByAccount].filter(g => g.account_id).map(g => g.account_id[0])
   )];
   const accounts = accountIds.length
-    ? await executeKw(env, uid, 'account.account', 'read', [accountIds, ['account_type', 'code', 'name']])
+    ? await executeKw(cfg, uid, 'account.account', 'read', [accountIds, ['account_type', 'code', 'name']])
     : [];
   const typeById = Object.fromEntries(accounts.map(a => [a.id, a.account_type]));
   const codeById = Object.fromEntries(accounts.map(a => [a.id, a.code || '']));
@@ -242,10 +131,6 @@ async function buildFinancialsReport(env, uid, params) {
     .filter(g => g.account_id && types.includes(typeById[g.account_id[0]]))
     .reduce((s, g) => s + (g.balance || 0), 0);
 
-  // Per-account line items for a category (e.g. every income account that
-  // makes up Revenue) — sign-normalized the same way as the category total
-  // (revenue accounts negated, expense accounts left as-is) so a positive
-  // number always means "contributes to this category's shown value".
   const detailByTypes = (groups, types, negate) => groups
     .filter(g => g.account_id && types.includes(typeById[g.account_id[0]]))
     .map(g => ({
@@ -267,10 +152,6 @@ async function buildFinancialsReport(env, uid, params) {
   const liabilities = -sumByTypes(bsByAccount, BS_LIABILITY_TYPES);
   const equity = -sumByTypes(bsByAccount, BS_EQUITY_TYPES);
 
-  // Per-type breakdown (sign-normalized so every value is "positive = the
-  // natural balance sheet value") for ratio calculations (current ratio,
-  // quick ratio, receivable days) that need finer granularity than the
-  // combined assets/liabilities/equity totals above.
   const byType = {};
   for (const t of [...BS_ASSET_TYPES, ...BS_LIABILITY_TYPES, ...BS_EQUITY_TYPES]) {
     const raw = sumByTypes(bsByAccount, [t]);
@@ -287,7 +168,7 @@ async function buildFinancialsReport(env, uid, params) {
     },
     balance_sheet: {
       as_of: dateTo, assets, liabilities,
-      equity: equity + netProfit, // approximate: fold current-period earnings into equity
+      equity: equity + netProfit,
       liabilities_and_equity: liabilities + equity + netProfit,
       by_type: byType,
     },
@@ -296,21 +177,14 @@ async function buildFinancialsReport(env, uid, params) {
   };
 }
 
-async function buildInventoryReport(env, uid, params) {
-  const companyId = getCompanyId(params);
+async function buildInventoryReport(cfg, uid, companyId) {
   const internalDomain = withCompany([['location_id.usage', '=', 'internal']], companyId);
-
-  // stock.quant.value is only populated under "Automated" inventory
-  // valuation — with the common "Manual" valuation method it silently
-  // returns 0 for every record (no error), which under-reports inventory
-  // value entirely. Compute value ourselves from quantity x standard_price
-  // instead, which works regardless of the valuation method configured.
-  const byProduct = await readGroup(env, uid, 'stock.quant', internalDomain, ['quantity'], ['product_id']);
+  const byProduct = await readGroup(cfg, uid, 'stock.quant', internalDomain, ['quantity'], ['product_id']);
 
   let totalValue = 0;
   const productIds = byProduct.filter(r => r.product_id).map(r => r.product_id[0]);
   const products = productIds.length
-    ? await executeKw(env, uid, 'product.product', 'read', [productIds, ['standard_price', 'categ_id']])
+    ? await executeKw(cfg, uid, 'product.product', 'read', [productIds, ['standard_price', 'categ_id']])
     : [];
   const priceById = Object.fromEntries(products.map(p => [p.id, p.standard_price]));
   const categById = Object.fromEntries(products.map(p => [p.id, p.categ_id ? p.categ_id[1] : 'Uncategorized']));
@@ -333,11 +207,11 @@ async function buildInventoryReport(env, uid, params) {
     .map(r => ({ product: r.product_id[1], quantity: r.quantity, value: r.value || 0 }));
 
   const [lowStock, last30In, last30Out] = await Promise.all([
-    searchRead(env, uid, 'stock.warehouse.orderpoint',
+    searchRead(cfg, uid, 'stock.warehouse.orderpoint',
       withCompany([['qty_to_order', '>', 0]], companyId), ['product_id', 'qty_to_order', 'product_min_qty'], { limit: 20 }),
-    searchCount(env, uid, 'stock.move',
+    searchCount(cfg, uid, 'stock.move',
       withCompany([['state', '=', 'done'], ['date', '>=', monthsAgo(1)], ['picking_type_id.code', '=', 'incoming']], companyId)),
-    searchCount(env, uid, 'stock.move',
+    searchCount(cfg, uid, 'stock.move',
       withCompany([['state', '=', 'done'], ['date', '>=', monthsAgo(1)], ['picking_type_id.code', '=', 'outgoing']], companyId)),
   ]);
 
@@ -359,25 +233,25 @@ async function buildInventoryReport(env, uid, params) {
   };
 }
 
-async function buildPurchaseReport(env, uid, params) {
-  const companyId = getCompanyId(params);
-  const { dateFrom, dateTo } = resolveRange(params);
+async function buildPurchaseReport(cfg, uid, companyId) {
+  const dateTo = today();
+  const dateFrom = monthsAgo(11);
   const purchasedStates = ['purchase', 'done'];
 
   const [totals, monthly, byProduct, bySupplier, pendingCount] = await Promise.all([
-    readGroup(env, uid, 'purchase.order',
+    readGroup(cfg, uid, 'purchase.order',
       withCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], []),
-    readGroup(env, uid, 'purchase.order',
+    readGroup(cfg, uid, 'purchase.order',
       withCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['date_order:month']),
-    readGroup(env, uid, 'purchase.order.line',
+    readGroup(cfg, uid, 'purchase.order.line',
       withCompany([['order_id.state', 'in', purchasedStates], ['order_id.date_order', '>=', dateFrom], ['order_id.date_order', '<=', dateTo], ['display_type', '=', false]], companyId),
       ['price_subtotal', 'product_qty'], ['product_id']),
-    readGroup(env, uid, 'purchase.order',
+    readGroup(cfg, uid, 'purchase.order',
       withCompany([['state', 'in', purchasedStates], ['date_order', '>=', dateFrom], ['date_order', '<=', dateTo]], companyId),
       ['amount_total'], ['partner_id']),
-    searchCount(env, uid, 'purchase.order', withCompany([['state', 'in', ['draft', 'sent', 'to approve']]], companyId)),
+    searchCount(cfg, uid, 'purchase.order', withCompany([['state', 'in', ['draft', 'sent', 'to approve']]], companyId)),
   ]);
 
   const totalSpend = totals[0]?.amount_total || 0;
@@ -397,20 +271,20 @@ async function buildPurchaseReport(env, uid, params) {
   };
 }
 
-async function buildManufacturingReport(env, uid, params) {
-  const companyId = getCompanyId(params);
-  const { dateFrom, dateTo } = resolveRange(params);
+async function buildManufacturingReport(cfg, uid, companyId) {
+  const dateTo = today();
+  const dateFrom = monthsAgo(11);
 
   const [byState, monthly, byProduct, delayedCount] = await Promise.all([
-    readGroup(env, uid, 'mrp.production',
+    readGroup(cfg, uid, 'mrp.production',
       withCompany([['date_start', '>=', dateFrom], ['date_start', '<=', dateTo]], companyId), ['product_qty'], ['state']),
-    readGroup(env, uid, 'mrp.production',
+    readGroup(cfg, uid, 'mrp.production',
       withCompany([['date_start', '>=', dateFrom], ['date_start', '<=', dateTo], ['state', '!=', 'cancel']], companyId),
       ['product_qty'], ['date_start:month']),
-    readGroup(env, uid, 'mrp.production',
+    readGroup(cfg, uid, 'mrp.production',
       withCompany([['state', '=', 'done'], ['date_start', '>=', dateFrom], ['date_start', '<=', dateTo]], companyId),
       ['product_qty', 'qty_produced'], ['product_id']),
-    searchCount(env, uid, 'mrp.production',
+    searchCount(cfg, uid, 'mrp.production',
       withCompany([['date_start', '<', today()], ['state', 'not in', ['done', 'cancel']]], companyId)),
   ]);
 
@@ -458,12 +332,10 @@ function buildAging(lines) {
   return { total, overdue, buckets, top };
 }
 
-async function buildAccountingReport(env, uid, params) {
-  const companyId = getCompanyId(params);
-
+async function buildAccountingReport(cfg, uid, companyId) {
   const [receivableAccounts, payableAccounts] = await Promise.all([
-    searchRead(env, uid, 'account.account', [['account_type', '=', 'asset_receivable']], ['id']),
-    searchRead(env, uid, 'account.account', [['account_type', '=', 'liability_payable']], ['id']),
+    searchRead(cfg, uid, 'account.account', [['account_type', '=', 'asset_receivable']], ['id']),
+    searchRead(cfg, uid, 'account.account', [['account_type', '=', 'liability_payable']], ['id']),
   ]);
   const receivableIds = receivableAccounts.map(a => a.id);
   const payableIds = payableAccounts.map(a => a.id);
@@ -471,16 +343,16 @@ async function buildAccountingReport(env, uid, params) {
   const openLineFields = ['partner_id', 'amount_residual', 'date_maturity', 'date'];
   const [arLines, apLines, journalActivity] = await Promise.all([
     receivableIds.length
-      ? searchRead(env, uid, 'account.move.line',
+      ? searchRead(cfg, uid, 'account.move.line',
           withCompany([['account_id', 'in', receivableIds], ['parent_state', '=', 'posted'], ['reconciled', '=', false], ['amount_residual', '!=', 0]], companyId),
           openLineFields, { limit: 2000 })
       : [],
     payableIds.length
-      ? searchRead(env, uid, 'account.move.line',
+      ? searchRead(cfg, uid, 'account.move.line',
           withCompany([['account_id', 'in', payableIds], ['parent_state', '=', 'posted'], ['reconciled', '=', false], ['amount_residual', '!=', 0]], companyId),
           openLineFields, { limit: 2000 })
       : [],
-    readGroup(env, uid, 'account.move',
+    readGroup(cfg, uid, 'account.move',
       withCompany([['state', '=', 'posted'], ['date', '>=', monthsAgo(0)]], companyId), ['amount_total'], ['move_type']),
   ]);
 
@@ -494,16 +366,15 @@ async function buildAccountingReport(env, uid, params) {
   };
 }
 
-async function buildWarehouseReport(env, uid, params) {
-  const companyId = getCompanyId(params);
-  const warehouses = await searchRead(env, uid, 'stock.warehouse', withCompany([], companyId), ['id', 'name', 'code']);
+async function buildWarehouseReport(cfg, uid, companyId) {
+  const warehouses = await searchRead(cfg, uid, 'stock.warehouse', withCompany([], companyId), ['id', 'name', 'code']);
 
   const internalDomain = withCompany([['location_id.usage', '=', 'internal']], companyId);
-  const quants = await searchRead(env, uid, 'stock.quant', internalDomain, ['warehouse_id', 'product_id', 'quantity'], { limit: 20000 });
+  const quants = await searchRead(cfg, uid, 'stock.quant', internalDomain, ['warehouse_id', 'product_id', 'quantity'], { limit: 20000 });
 
   const productIds = [...new Set(quants.filter(q => q.product_id).map(q => q.product_id[0]))];
   const products = productIds.length
-    ? await executeKw(env, uid, 'product.product', 'read', [productIds, ['standard_price']])
+    ? await executeKw(cfg, uid, 'product.product', 'read', [productIds, ['standard_price']])
     : [];
   const priceById = Object.fromEntries(products.map(p => [p.id, p.standard_price]));
 
@@ -517,9 +388,9 @@ async function buildWarehouseReport(env, uid, params) {
   }
 
   const [transfersLast30, pendingTransfers] = await Promise.all([
-    readGroup(env, uid, 'stock.picking',
+    readGroup(cfg, uid, 'stock.picking',
       withCompany([['state', '=', 'done'], ['date_done', '>=', monthsAgo(1)]], companyId), [], ['picking_type_id']),
-    searchCount(env, uid, 'stock.picking',
+    searchCount(cfg, uid, 'stock.picking',
       withCompany([['state', 'in', ['confirmed', 'assigned', 'waiting']]], companyId)),
   ]);
 
@@ -534,53 +405,13 @@ async function buildWarehouseReport(env, uid, params) {
   };
 }
 
-// ── Router ───────────────────────────────────────────────────────────────
-export default {
-  async fetch(request, env) {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders(env) });
-    }
-
-    const url = new URL(request.url);
-    const token = request.headers.get('X-Proxy-Token') || url.searchParams.get('token');
-    if (!env.PROXY_TOKEN || token !== env.PROXY_TOKEN) {
-      return json(env, { error: 'Unauthorized' }, 401);
-    }
-
-    try {
-      const uid = await odooAuthenticate(env);
-      let result;
-      switch (url.pathname) {
-        case '/api/companies':
-          result = await buildCompaniesReport(env, uid);
-          break;
-        case '/api/sales':
-          result = await buildSalesReport(env, uid, url.searchParams);
-          break;
-        case '/api/financials':
-          result = await buildFinancialsReport(env, uid, url.searchParams);
-          break;
-        case '/api/inventory':
-          result = await buildInventoryReport(env, uid, url.searchParams);
-          break;
-        case '/api/purchase':
-          result = await buildPurchaseReport(env, uid, url.searchParams);
-          break;
-        case '/api/manufacturing':
-          result = await buildManufacturingReport(env, uid, url.searchParams);
-          break;
-        case '/api/accounting':
-          result = await buildAccountingReport(env, uid, url.searchParams);
-          break;
-        case '/api/warehouse':
-          result = await buildWarehouseReport(env, uid, url.searchParams);
-          break;
-        default:
-          return json(env, { error: 'Not found' }, 404);
-      }
-      return json(env, result);
-    } catch (err) {
-      return json(env, { error: err.message || String(err) }, 500);
-    }
-  },
+module.exports = {
+  buildCompaniesReport,
+  buildSalesReport,
+  buildFinancialsReport,
+  buildInventoryReport,
+  buildPurchaseReport,
+  buildManufacturingReport,
+  buildAccountingReport,
+  buildWarehouseReport,
 };

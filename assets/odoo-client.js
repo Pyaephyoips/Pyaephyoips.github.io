@@ -409,6 +409,112 @@ async function directBuildManufacturingReport(cfg, uid, params) {
   };
 }
 
+function directAgeBucket(dateStr, dueStr) {
+  const due = dueStr || dateStr;
+  if (!due) return 'current';
+  const days = Math.floor((new Date(directToday()) - new Date(due)) / 86400000);
+  if (days <= 0) return 'current';
+  if (days <= 30) return '1_30';
+  if (days <= 60) return '31_60';
+  if (days <= 90) return '61_90';
+  return 'over_90';
+}
+
+function directBuildAging(lines) {
+  const buckets = { current: 0, '1_30': 0, '31_60': 0, '61_90': 0, over_90: 0 };
+  const byPartner = {};
+  for (const l of lines) {
+    const amt = Math.abs(l.amount_residual || 0);
+    const bucket = directAgeBucket(l.date, l.date_maturity);
+    buckets[bucket] += amt;
+    const partner = l.partner_id ? l.partner_id[1] : 'Unknown';
+    byPartner[partner] = (byPartner[partner] || 0) + amt;
+  }
+  const total = Object.values(buckets).reduce((s, v) => s + v, 0);
+  const overdue = total - buckets.current;
+  const top = Object.entries(byPartner)
+    .map(([partner, amount]) => ({ partner, total: amount }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+  return { total, overdue, buckets, top };
+}
+
+async function directBuildAccountingReport(cfg, uid, params) {
+  const companyId = directGetCompanyId(params);
+
+  const [receivableAccounts, payableAccounts] = await Promise.all([
+    directSearchRead(cfg, uid, 'account.account', [['account_type', '=', 'asset_receivable']], ['id']),
+    directSearchRead(cfg, uid, 'account.account', [['account_type', '=', 'liability_payable']], ['id']),
+  ]);
+  const receivableIds = receivableAccounts.map(a => a.id);
+  const payableIds = payableAccounts.map(a => a.id);
+
+  const openLineFields = ['partner_id', 'amount_residual', 'date_maturity', 'date'];
+  const [arLines, apLines, journalActivity] = await Promise.all([
+    receivableIds.length
+      ? directSearchRead(cfg, uid, 'account.move.line',
+          directWithCompany([['account_id', 'in', receivableIds], ['parent_state', '=', 'posted'], ['reconciled', '=', false], ['amount_residual', '!=', 0]], companyId),
+          openLineFields, { limit: 2000 })
+      : [],
+    payableIds.length
+      ? directSearchRead(cfg, uid, 'account.move.line',
+          directWithCompany([['account_id', 'in', payableIds], ['parent_state', '=', 'posted'], ['reconciled', '=', false], ['amount_residual', '!=', 0]], companyId),
+          openLineFields, { limit: 2000 })
+      : [],
+    directReadGroup(cfg, uid, 'account.move',
+      directWithCompany([['state', '=', 'posted'], ['date', '>=', directMonthsAgo(0)]], companyId), ['amount_total'], ['move_type']),
+  ]);
+
+  return {
+    as_of: directToday(),
+    receivables: directBuildAging(arLines),
+    payables: directBuildAging(apLines),
+    journal_activity_this_month: journalActivity.map(r => ({ move_type: r.move_type, total: r.amount_total, count: r.__count })),
+    note: 'Aging is estimated from open (unreconciled) account.move.line residuals, bucketed by ' +
+          'days past the due date (or entry date when no due date is set).',
+  };
+}
+
+async function directBuildWarehouseReport(cfg, uid, params) {
+  const companyId = directGetCompanyId(params);
+  const warehouses = await directSearchRead(cfg, uid, 'stock.warehouse', directWithCompany([], companyId), ['id', 'name', 'code']);
+
+  const internalDomain = directWithCompany([['location_id.usage', '=', 'internal']], companyId);
+  const quants = await directSearchRead(cfg, uid, 'stock.quant', internalDomain, ['warehouse_id', 'product_id', 'quantity'], { limit: 20000 });
+
+  const productIds = [...new Set(quants.filter(q => q.product_id).map(q => q.product_id[0]))];
+  const products = productIds.length
+    ? await directExecuteKw(cfg, uid, 'product.product', 'read', [productIds, ['standard_price']])
+    : [];
+  const priceById = Object.fromEntries(products.map(p => [p.id, p.standard_price]));
+
+  const byWarehouse = {};
+  for (const q of quants) {
+    const wh = q.warehouse_id ? q.warehouse_id[1] : 'Unassigned';
+    const price = q.product_id ? (priceById[q.product_id[0]] || 0) : 0;
+    if (!byWarehouse[wh]) byWarehouse[wh] = { quantity: 0, value: 0 };
+    byWarehouse[wh].quantity += q.quantity || 0;
+    byWarehouse[wh].value += (q.quantity || 0) * price;
+  }
+
+  const [transfersLast30, pendingTransfers] = await Promise.all([
+    directReadGroup(cfg, uid, 'stock.picking',
+      directWithCompany([['state', '=', 'done'], ['date_done', '>=', directMonthsAgo(1)]], companyId), [], ['picking_type_id']),
+    directSearchCount(cfg, uid, 'stock.picking',
+      directWithCompany([['state', 'in', ['confirmed', 'assigned', 'waiting']]], companyId)),
+  ]);
+
+  return {
+    as_of: directToday(),
+    warehouses: warehouses.map(w => ({ id: w.id, name: w.name, code: w.code })),
+    by_warehouse: Object.entries(byWarehouse)
+      .map(([warehouse, v]) => ({ warehouse, quantity: v.quantity, value: v.value }))
+      .sort((a, b) => b.value - a.value),
+    transfer_activity_last_30d: transfersLast30.map(r => ({ picking_type: r.picking_type_id ? r.picking_type_id[1] : 'Unknown', count: r.__count })),
+    pending_transfers: pendingTransfers,
+  };
+}
+
 async function fetchOdooReportDirect(path, params, cfg) {
   const uid = await directAuthenticate(cfg);
   switch (path) {
@@ -418,6 +524,8 @@ async function fetchOdooReportDirect(path, params, cfg) {
     case '/api/inventory': return directBuildInventoryReport(cfg, uid, params);
     case '/api/purchase': return directBuildPurchaseReport(cfg, uid, params);
     case '/api/manufacturing': return directBuildManufacturingReport(cfg, uid, params);
+    case '/api/accounting': return directBuildAccountingReport(cfg, uid, params);
+    case '/api/warehouse': return directBuildWarehouseReport(cfg, uid, params);
     default: throw new Error(`Unknown report path: ${path}`);
   }
 }

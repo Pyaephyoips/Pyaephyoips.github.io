@@ -17,6 +17,8 @@
     <a href="inventory-dashboard.html">Inventory</a>
     <a href="purchase-dashboard.html">Purchase</a>
     <a href="manufacturing-dashboard.html" class="active">Manufacturing</a>
+    <a href="accounting-dashboard.html">Accounting</a>
+    <a href="warehouse-dashboard.html">Warehouse</a>
   </nav>
 </header>
 
@@ -39,7 +41,7 @@
     <div id="companySwitcher"></div>
     <button class="btn-refresh" onclick="exportExcel()">⬇ Excel</button>
     <button class="btn-refresh" onclick="window.print()">🖨 PDF</button>
-    <button class="btn-refresh" onclick="load()">↻ Refresh</button>
+    <button class="btn-refresh" onclick="load(false)">↻ Refresh</button>
   </div>
 
   <div class="kpi-row" id="kpiRow"></div>
@@ -61,9 +63,14 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="assets/firebase-config.js"></script>
+<script src="assets/firebase-client.js?v=1"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="assets/odoo-client.js?v=10"></script>
-<script src="assets/odoo-dashboard.js?v=10"></script>
+<script src="assets/odoo-client.js?v=11"></script>
+<script src="assets/odoo-dashboard.js?v=11"></script>
 <script>
 let months = 12;
 let customRange = null;
@@ -81,7 +88,7 @@ function setPeriod(m, btn) {
   document.getElementById('dateTo').value = '';
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  load();
+  load(false);
 }
 
 function applyCustomRange() {
@@ -90,19 +97,19 @@ function applyCustomRange() {
   if (!from || !to) { alert('Please pick both a start and end date.'); return; }
   customRange = { date_from: from, date_to: to };
   document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-  load();
+  load(false);
 }
 
-async function load() {
-  if (!odooConfigured()) {
+async function load(fromCache = true) {
+  if (!dataSourceAvailable()) {
     renderSetupNote('setupNote');
     showState('stateBanner', null);
     return;
   }
   document.getElementById('setupNote').style.display = 'none';
-  showState('stateBanner', 'loading', 'Loading manufacturing data from Odoo…');
+  showState('stateBanner', 'loading', 'Loading manufacturing data…');
   try {
-    const data = await fetchOdooReport('/api/manufacturing', customRange || { months });
+    const data = await fetchReport('/api/manufacturing', customRange || { months }, fromCache);
     showState('stateBanner', null);
     lastData = data;
     render(data);
@@ -158,8 +165,10 @@ function exportExcel() {
   ]);
 }
 
-load();
-renderCompanySwitcher('companySwitcher');
+requireFirebaseAuth(() => {
+  load();
+  renderCompanySwitcher('companySwitcher');
+});
 </script>
 </body>
 </html>
