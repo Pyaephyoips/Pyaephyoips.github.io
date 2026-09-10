@@ -128,6 +128,13 @@ source, never committed to the repo, never sent anywhere but your Odoo
 server. This is the quickest way to get started and needs nothing beyond
 an Odoo API key.
 
+Already connected and need to change any of those four values? Click the
+**⚙ Odoo Settings** button next to the company switcher on any dashboard
+— it reopens the same form, pre-filled with what's currently saved, so you
+can edit the URL, database, username, or API key without disconnecting
+first. (Only applies to direct connections — if you're using the Cloudflare
+proxy below, that config lives in `assets/odoo-dashboard.js` instead.)
+
 **Requirement:** your Odoo server must send CORS headers allowing
 `https://pyaephyoips.github.io` (or wherever this site is hosted), because
 the browser calls Odoo's `/jsonrpc` endpoint cross-origin. Odoo does not do
